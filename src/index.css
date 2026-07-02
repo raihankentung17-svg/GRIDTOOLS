@@ -1,0 +1,10 @@
+/* Standar baru Tailwind versi 4 */
+@import "tailwindcss";
+
+/* Menghapus margin bawaan browser dan memastikan tinggi penuh */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
