@@ -18,22 +18,21 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   
   // Kontrol Slider
-  const [scale, setScale] = useState(50); // 50 = 1.00x (Ukuran Asli)
+  const [scale, setScale] = useState(80); // Logika Video: 100 = Penuh, <100 = Mengecil di tengah (Bleed)
   const [complexity, setComplexity] = useState(60); 
   const [density, setDensity] = useState(65);       
   const [stretchInt, setStretchInt] = useState(72); 
-  const [brutalInt, setBrutalInt] = useState(25); // Tingkat Brutal/Distorsi
+  const [brutalInt, setBrutalInt] = useState(25); // Tingkat tebal tarikan
   const [stretchDirX, setStretchDirX] = useState(true);
   const [stretchDirY, setStretchDirY] = useState(true);
   const [showGridLines, setShowGridLines] = useState(true);
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
-  const [textColor, setTextColor] = useState('#000000'); // State untuk Warna Teks
+  const [textColor, setTextColor] = useState('#000000'); 
 
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [annoLang, setAnnoLang] = useState('EN'); // EN, JP, ID
-  const [apiKeyInput, setApiKeyInput] = useState(''); // State baru untuk API Key GitHub
+  const [annoLang, setAnnoLang] = useState('EN'); 
+  const [apiKeyInput, setApiKeyInput] = useState(''); 
 
-  // Kumpulan kata standar saat aplikasi pertama kali dibuka
   const fallbackWords = {
     'ID': ['HIJAU', 'DAUN', 'ALAM', 'TEKS', 'SEDERHANA', 'DESAIN', 'KISI', 'TANAMAN', 'CABANG', 'DATAR', 'JELAS', 'REGANG'],
     'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
@@ -41,7 +40,6 @@ export default function App() {
   };
   
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
-
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -87,7 +85,6 @@ export default function App() {
   const handleAiAnalysis = async () => {
     if (!image) return; 
     
-    // Validasi API Key
     if (!apiKeyInput || apiKeyInput.trim() === '') {
         alert("Silakan masukkan API Key (Token) GitHub Anda terlebih dahulu.");
         return;
@@ -110,15 +107,11 @@ export default function App() {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
-        // Format gambar Base64 untuk payload OpenAI style
         const base64Data = `data:image/jpeg;base64,${tempCanvas.toDataURL('image/jpeg', 0.8).split(',')[1]}`;
-        
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
-        
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS (if applicable). No intro, no outro, no markdown.`;
         
-        // MENGGUNAKAN ENDPOINT GITHUB MODELS (Azure AI Inference)
         const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
             method: 'POST',
             headers: { 
@@ -126,29 +119,17 @@ export default function App() {
                 'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                // Menggunakan model Vision gratis & cepat dari jajaran GitHub Models
                 model: "gpt-4o-mini", 
                 messages: [
-                    {
-                        role: "user",
-                        content: [
-                            { type: "text", text: promptText },
-                            { type: "image_url", image_url: { url: base64Data } }
-                        ]
-                    }
+                    { role: "user", content: [ { type: "text", text: promptText }, { type: "image_url", image_url: { url: base64Data } } ] }
                 ]
             })
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || data.error?.message || `API Error: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(data.message || data.error?.message || `API Error: ${response.status}`);
         
-        // Membaca respons dari format GitHub/OpenAI
         let text = data.choices?.[0]?.message?.content;
-        
         if (text) {
             text = text.replace(/`/g, '').replace(/csv/g, '').trim();
             const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
@@ -180,15 +161,13 @@ export default function App() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     
-    // Default fallback jika belum ada gambar
+    // Default fallback
     if (!image) {
       const rect = canvas.parentElement.getBoundingClientRect();
       canvas.width = rect.width || 800;
       canvas.height = rect.height || 600;
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.fillStyle = '#E5E7EB';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = '30px sans-serif';
@@ -198,56 +177,47 @@ export default function App() {
     }
 
     const rng = mulberry32(seed);
-    
-    // --- 1. DETEKSI UKURAN GAMBAR ASLI & AUTO SCALING ---
-    // scale 50 = 1.00x (sesuai resolusi asli). Jika scale 100 = 2.00x (resolusi ganda).
-    const scaleFactor = scale / 50; 
     const isRotated = rotation % 180 !== 0;
     
-    // Memeluk ketat bounding box gambar (Hanya proses pada kotak ukurannya)
-    if (isRotated) {
-        canvas.width = Math.max(1, Math.floor(image.height * scaleFactor));
-        canvas.height = Math.max(1, Math.floor(image.width * scaleFactor));
-    } else {
-        canvas.width = Math.max(1, Math.floor(image.width * scaleFactor));
-        canvas.height = Math.max(1, Math.floor(image.height * scaleFactor));
-    }
+    // --- 1. RESOLUSI ASLI GAMBAR (Untuk Ekspor Super Jernih) ---
+    // Kanvas output akan sama persis ukurannya dengan ukuran file asli gambar
+    canvas.width = isRotated ? image.height : image.width;
+    canvas.height = isRotated ? image.width : image.height;
+    
+    const relScale = Math.max(1, canvas.width / 1000); // Rasio agar tebal garis/font tetap proporsional
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#FFFFFF'; // Background dasar (di video menggunakan latar putih bersih)
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // --- 2. KANVAS SUMBER MENGKUTI SKALA ---
+    // --- 2. KANVAS SUMBER (LOGIKA "SHRINK & BLEED" DARI VIDEO) ---
     const offscreen = document.createElement('canvas');
     offscreen.width = canvas.width;
     offscreen.height = canvas.height;
     const offCtx = offscreen.getContext('2d');
     
+    // Background dibiarkan transparan atau putih agar potongan kosong tidak menarik gambar lama
     offCtx.fillStyle = '#FFFFFF';
     offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
 
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
+    
+    // Logika Video: Skala (10-100%) mengecilkan gambar di TENGAH, menyisakan ruang kosong di pinggir
+    const scaleFactor = scale / 100; 
     const drawW = Math.floor(image.width * scaleFactor);
     const drawH = Math.floor(image.height * scaleFactor);
 
     offCtx.save();
     offCtx.translate(centerX, centerY);
     offCtx.rotate((rotation * Math.PI) / 180);
-    offCtx.translate(-centerX, -centerY);
-    
-    if (isRotated) {
-        offCtx.drawImage(image, centerX - drawW/2, centerY - drawH/2, drawW, drawH);
-    } else {
-        offCtx.drawImage(image, 0, 0, drawW, drawH);
-    }
+    // Draw tepat di tengah berdasarkan dimensi gambar yang diperkecil
+    offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    // --- 3. AUTO ADJUST SEMUA PARAMETER ---
-    // Logika: Saat skala membesar, kompleksitas kisi dan ketebalan tarikan otomatis menyesuaikan
-    const scaledComplexity = complexity * scaleFactor;
-    const numCols = Math.max(2, Math.floor(10 + (scaledComplexity / 100) * 80));
-    const numRows = Math.max(2, Math.floor(10 + (scaledComplexity / 100) * 80));
+    // --- 3. PEMBUATAN MATRIKS KISI ---
+    const numCols = Math.floor(10 + (complexity / 100) * 80);
+    const numRows = Math.floor(10 + (complexity / 100) * 80);
     
     let xCuts = [0, canvas.width];
     for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
@@ -259,9 +229,11 @@ export default function App() {
 
     const pStretch = (stretchInt / 100); 
     const pEmpty = (1 - (density / 100)) * 0.6; 
-    const scaledBrutalInt = brutalInt * scaleFactor;
+    
+    // Karena kanvas ini beresolusi sangat tinggi, kita scale brutalInt
+    const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
 
-    // --- 4. RENDER MATRIKS ---
+    // --- 4. RENDER EFEK SLIT-SCAN (Menarik Tepi Gambar) ---
     for (let i = 0; i < xCuts.length - 1; i++) {
         for (let j = 0; j < yCuts.length - 1; j++) {
             const x = xCuts[i];
@@ -273,23 +245,22 @@ export default function App() {
 
             const dstW = w + 1;
             const dstH = h + 1;
-
             const r = rng();
 
             if (r < pEmpty) {
+                // CELAH PUTIH
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillRect(x, y, dstW, dstH);
             } 
             else if (r < pEmpty + pStretch) {
+                // SLIT-SCAN (Karena gambar di tengah mengecil, tarikan ini akan melebar ke ujung kanvas)
                 let isHoriz = rng() > 0.5;
                 if (!stretchDirX && stretchDirY) isHoriz = false;
                 if (stretchDirX && !stretchDirY) isHoriz = true;
-
                 const isBrutal = rng() < (brutalInt / 100);
-                const maxThick = Math.max(1, Math.floor((scaledBrutalInt / 100) * 20)); 
 
                 if (isHoriz && stretchDirX) {
-                    let sliceW = Math.max(1, Math.floor(1 * scaleFactor));
+                    let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); // Slice setipis mungkin untuk pure pixel stretch
                     let srcX = rng() > 0.5 ? x : (x + w - sliceW); 
                     
                     if (isBrutal) {
@@ -298,11 +269,10 @@ export default function App() {
                         if (rng() > 0.4) srcX = x + Math.floor(rng() * (w - sliceW));
                     }
                     if(srcX < x) srcX = x;
-
                     ctx.drawImage(offscreen, srcX, y, sliceW, h, x, y, dstW, dstH);
                 } 
                 else if (!isHoriz && stretchDirY) {
-                    let sliceH = Math.max(1, Math.floor(1 * scaleFactor));
+                    let sliceH = Math.max(1, Math.floor(1 * relScale * 0.5));
                     let srcY = rng() > 0.5 ? y : (y + h - sliceH);
 
                     if (isBrutal) {
@@ -311,7 +281,6 @@ export default function App() {
                         if (rng() > 0.4) srcY = y + Math.floor(rng() * (h - sliceH));
                     }
                     if(srcY < y) srcY = y;
-
                     ctx.drawImage(offscreen, x, srcY, w, sliceH, x, y, dstW, dstH);
                 } else {
                     ctx.drawImage(offscreen, x, y, w, h, x, y, dstW, dstH);
@@ -323,10 +292,10 @@ export default function App() {
         }
     }
 
-    // --- 5. DEKORASI BERSKALA OTOMATIS ---
+    // --- 5. DEKORASI (Garis & Font yang dikalibrasi ke Resolusi Asli) ---
     if (showGridLines) {
         ctx.fillStyle = '#000000';
-        ctx.lineWidth = Math.max(1, Math.floor(1 * scaleFactor));
+        ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
         
         xCuts.forEach(x => {
@@ -336,14 +305,13 @@ export default function App() {
            if(rng() > 0.8) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
         });
 
+        // Balok Hitam Dekoratif
         for (let i = 0; i < 5; i++) {
             const bx = xCuts[Math.floor(rng() * (xCuts.length - 2))];
             const by = yCuts[Math.floor(rng() * (yCuts.length - 2))];
-            const bw = ((rng() > 0.5) ? (rng() * 100 + 20) : (xCuts[xCuts.indexOf(bx) + 1] - bx)) * scaleFactor;
-            const bh = ((rng() > 0.5) ? (rng() * 100 + 20) : (yCuts[yCuts.indexOf(by) + 1] - by)) * scaleFactor;
-            if (rng() > 0.3) {
-                ctx.fillRect(bx, by, bw, bh);
-            }
+            const bw = ((rng() > 0.5) ? (rng() * 100 + 20) : (xCuts[xCuts.indexOf(bx) + 1] - bx));
+            const bh = ((rng() > 0.5) ? (rng() * 100 + 20) : (yCuts[yCuts.indexOf(by) + 1] - by));
+            if (rng() > 0.3) ctx.fillRect(bx, by, bw, bh);
         }
     }
 
@@ -352,14 +320,14 @@ export default function App() {
         const maxAnnotations = Math.floor(15 * (density/100));
         let count = 0;
 
-        // Auto Scaling Font Size
-        const mainFont = Math.max(10, Math.floor(18 * scaleFactor));
-        const subFont = Math.max(8, Math.floor(12 * scaleFactor));
-        const spacing1 = Math.floor(10 * scaleFactor);
-        const spacing2 = Math.floor(5 * scaleFactor);
-        const spacing3 = Math.floor(8 * scaleFactor);
-        const barWidth = Math.floor(45 * scaleFactor);
-        const barHeight = Math.max(1, Math.floor(2 * scaleFactor));
+        // Auto Scaling Font Size berdasarkan lebar kanvas asli gambar
+        const mainFont = Math.max(12, Math.floor(18 * relScale * 0.8));
+        const subFont = Math.max(8, Math.floor(12 * relScale * 0.8));
+        const spacing1 = Math.floor(10 * relScale * 0.8);
+        const spacing2 = Math.floor(5 * relScale * 0.8);
+        const spacing3 = Math.floor(8 * relScale * 0.8);
+        const barWidth = Math.floor(45 * relScale * 0.8);
+        const barHeight = Math.max(1, Math.floor(2 * relScale * 0.8));
 
         for (let j = 5; j < yCuts.length - 5; j+=2) {
             if (count >= maxAnnotations) break;
@@ -379,17 +347,14 @@ export default function App() {
                 ctx.fillText(`${num}+`, x, y + spacing2);
                 
                 ctx.fillRect(x, y + spacing3, barWidth, barHeight);
-                
                 count++;
             }
         }
     }
-
   }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor]);
 
   useEffect(() => {
     drawCanvas();
-    // Menambahkan deteksi perubahan ukuran layar (orientasi HP/Laptop)
     window.addEventListener('resize', drawCanvas);
     return () => window.removeEventListener('resize', drawCanvas);
   }, [drawCanvas]);
@@ -397,13 +362,12 @@ export default function App() {
 
   return (
     <div 
-      // PERBAIKAN RESPONSITAS: flex-col-reverse untuk HP (Bawah-Atas), flex-row untuk Laptop (Kiri-Kanan)
       className="flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen bg-gray-100 font-sans overflow-hidden"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* PANEL KIRI (Di HP menjadi Panel Bawah yg bisa di-scroll) */}
+      {/* PANEL KIRI (Kontrol UI) */}
       <div className="w-full md:w-[340px] h-[60dvh] md:h-full bg-white shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r border-gray-200 flex-shrink-0">
         <div className="p-6 border-b border-gray-100 bg-gray-50">
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Alat Regang Kisi</h1>
@@ -434,11 +398,11 @@ export default function App() {
 
             <div className="pt-2">
                 <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2">
-                    <span>Skala Resolusi & Parameter</span>
-                    {/* Merubah dari persentase menjadi pengali (x) agar lebih intuitif */}
-                    <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-mono">{(scale / 50).toFixed(2)}x</span>
+                    <span>Skala Gambar (Zoom)</span>
+                    <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-mono">{scale}%</span>
                 </div>
-                <input type="range" min="10" max="150" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                {/* Skala dirubah menjadi 10-100% untuk efek shrinking seperti di video */}
+                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
             </div>
           </div>
 
@@ -567,7 +531,7 @@ export default function App() {
                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-black cursor-pointer rounded" />
                  </label>
                  
-                 {/* Color Picker Baru untuk Teks Anotasi */}
+                 {/* Color Picker untuk Teks Anotasi */}
                  {showTextAnnotations && (
                      <div className="flex items-center justify-between pl-2 border-l-2 border-gray-200 ml-1">
                          <span className="text-xs font-medium text-gray-500">Warna Teks</span>
@@ -593,7 +557,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* PANEL KANAN (Di HP menjadi Panel Atas tempat gambar berada) */}
+      {/* PANEL KANAN (Kanvas Workspace) */}
       <div className="flex-1 w-full h-[40dvh] md:h-full p-4 md:p-8 flex items-center justify-center bg-[#F3F4F6] relative overflow-hidden">
          
          {/* Overlay saat drag and drop */}
@@ -607,7 +571,7 @@ export default function App() {
            </div>
          )}
          
-         {/* Canvas Container yang memeluk gambar secara ketat */}
+         {/* Canvas Container: Mempertahankan responsivitas layar sekaligus menjaga gambar beresolusi super tinggi */}
          <div className="w-full h-full flex items-center justify-center">
             <canvas 
                 ref={canvasRef} 
