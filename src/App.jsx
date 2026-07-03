@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- Generator Angka Acak Konsisten (Seeded RNG) ---
 function mulberry32(a) {
