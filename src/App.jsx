@@ -11,7 +11,7 @@ function mulberry32(a) {
 }
 
 // --- Komponen Penggaris Dinamis (Dynamic Ruler) ---
-const Ruler = ({ type, pan, zoom, length }) => {
+const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -20,18 +20,17 @@ const Ruler = ({ type, pan, zoom, length }) => {
         const ctx = canvas.getContext('2d');
         const isH = type === 'h';
         
-        // Atur dimensi resolusi tajam
         canvas.width = isH ? length : 24;
         canvas.height = isH ? 24 : length;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Background gelap ala Photoshop
-        ctx.fillStyle = '#222222'; 
+        // Adaptasi Warna Penggaris berdasarkan Tema
+        ctx.fillStyle = isDarkMode ? '#222222' : '#F9FAFB'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#999999'; // Warna Teks
-        ctx.strokeStyle = '#555555'; // Warna Garis Titik (Ticks)
+        ctx.fillStyle = isDarkMode ? '#999999' : '#6B7280'; // Warna Teks
+        ctx.strokeStyle = isDarkMode ? '#555555' : '#D1D5DB'; // Warna Garis Titik (Ticks)
         ctx.font = '9px sans-serif';
         ctx.textBaseline = 'top';
         ctx.lineWidth = 1;
@@ -39,7 +38,6 @@ const Ruler = ({ type, pan, zoom, length }) => {
         const center = length / 2;
         const panOffset = isH ? pan.x : pan.y;
         
-        // Logika Dinamis Step: Menentukan jarak antar titik berdasarkan Zoom
         let step = 10;
         if (zoom < 0.5) step = 20;
         if (zoom < 0.2) step = 50;
@@ -47,7 +45,6 @@ const Ruler = ({ type, pan, zoom, length }) => {
         if (zoom > 2) step = 5;
         if (zoom > 5) step = 1;
 
-        // Mencari batas render kanvas berdasarkan pan dan zoom
         const startCanvasPos = (0 - center - panOffset) / zoom;
         const endCanvasPos = (length - center - panOffset) / zoom;
         const start = Math.floor(startCanvasPos / step) * step;
@@ -57,7 +54,6 @@ const Ruler = ({ type, pan, zoom, length }) => {
         for (let val = start; val <= end; val += step) {
             const screenPos = Math.round(center + panOffset + (val * zoom)) + 0.5; 
             
-            // Logika tinggi garis bantu (Tick marks)
             let tickLen = 4;
             const isMajor = Math.abs(val) % (step * 10) === 0 || val === 0;
             const isMid = Math.abs(val) % (step * 5) === 0;
@@ -86,7 +82,7 @@ const Ruler = ({ type, pan, zoom, length }) => {
             }
         }
         ctx.stroke();
-    }, [type, pan, zoom, length]);
+    }, [type, pan, zoom, length, isDarkMode]);
 
     return (
         <canvas 
@@ -97,6 +93,9 @@ const Ruler = ({ type, pan, zoom, length }) => {
 };
 
 export default function App() {
+  // --- Manajemen Tema (Dark Mode) ---
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
   // --- Manajemen State ---
   const [image, setImage] = useState(null);
   const [rotation, setRotation] = useState(0);
@@ -113,7 +112,7 @@ export default function App() {
   
   // State Guidelines (Garis Bantu)
   const [guides, setGuides] = useState([]);
-  const [draggingGuide, setDraggingGuide] = useState(null); // { id, type }
+  const [draggingGuide, setDraggingGuide] = useState(null); 
 
   // Referensi DOM & Loop
   const maskPointsRef = useRef([]); 
@@ -135,17 +134,11 @@ export default function App() {
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
   const [textColor, setTextColor] = useState('#000000'); 
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
 
-  const fallbackWords = {
-    'ID': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
-    'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
-    'JP': ['緑', '葉', '自然', 'テキスト', 'シンプル', 'デザイン', 'グリッド', '植物', '枝', 'フラット', 'クリア', 'ストレッチ']
-  };
-  const [aiWords, setAiWords] = useState(fallbackWords['EN']);
+  const fallbackWords = ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'];
+  const [aiWords, setAiWords] = useState(fallbackWords);
 
-  // Resize Observer untuk Viewport (Ruang Kerja Rulers)
   useEffect(() => {
     const updateSize = () => {
         if (viewportRef.current) {
@@ -160,12 +153,6 @@ export default function App() {
   useEffect(() => {
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, []);
-
-  // Hubungkan UI kiri dan Toolbar kanan
-  useEffect(() => {
-    if (isManualMode && activeTool !== 'brush') setActiveTool('brush');
-    else if (!isManualMode && activeTool === 'brush') setActiveTool('pan');
-  }, [isManualMode, activeTool]);
 
   // --- Fungsi Penanganan File ---
   const processFile = (file) => {
@@ -215,31 +202,24 @@ export default function App() {
   };
 
   const handleWorkspacePointerMove = (e) => {
-    // 1. Dragging Guidelines
     if (draggingGuide) {
       e.preventDefault();
       const rect = viewportRef.current.getBoundingClientRect();
       const screenPos = draggingGuide.type === 'h' ? e.clientY - rect.top : e.clientX - rect.left;
       const center = draggingGuide.type === 'h' ? rect.height / 2 : rect.width / 2;
       const panOffset = draggingGuide.type === 'h' ? pan.y : pan.x;
-      
-      // Kalkulasi mengubah koordinat layar ke koordinat canvas asli (agar menempel saat di-zoom)
       const canvasPos = (screenPos - center - panOffset) / viewScale;
-
       setGuides(prev => prev.map(g => g.id === draggingGuide.id ? { ...g, pos: canvasPos } : g));
     } 
-    // 2. Panning Canvas
     else if (isPanning) {
       setPan(prev => ({ x: prev.x + e.nativeEvent.movementX, y: prev.y + e.nativeEvent.movementY }));
     } 
-    // 3. Brushing
     else if (isPaintingRef.current && activeTool === 'brush' && isManualMode) {
       addMaskPoint(e);
     }
   };
 
   const handleWorkspacePointerUp = (e) => {
-    // 1. Lepas Guidelines (Cek apakah dibuang keluar kanvas/kembali ke rulers)
     if (draggingGuide) {
       const rect = viewportRef.current.getBoundingClientRect();
       const screenPos = draggingGuide.type === 'h' ? e.clientY - rect.top : e.clientX - rect.left;
@@ -255,7 +235,6 @@ export default function App() {
     e.target.releasePointerCapture(e.pointerId);
   };
 
-  // Logika Pembuatan Garis dari Ruler
   const startGuideFromRuler = (e, type) => {
     e.preventDefault();
     if (!viewportRef.current) return;
@@ -263,8 +242,6 @@ export default function App() {
     const screenPos = type === 'h' ? e.clientY - rect.top : e.clientX - rect.left;
     const center = type === 'h' ? rect.height / 2 : rect.width / 2;
     const panOffset = type === 'h' ? pan.y : pan.x;
-    
-    // Kalkulasi Koordinat Menempel pada Canvas
     const canvasPos = (screenPos - center - panOffset) / viewScale;
     
     const newId = Date.now().toString();
@@ -289,7 +266,6 @@ export default function App() {
   };
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
-
 
   // --- LOGIKA UTAMA RENDER CANVAS (SLIT-SCAN) ---
   const drawCanvas = useCallback(() => {
@@ -497,140 +473,174 @@ export default function App() {
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
   return (
-    <div className="flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen bg-[#111] font-sans overflow-hidden">
+    <div className="flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden">
       
-      {/* --- PANEL KIRI (Kontrol UI - Menerjemahkan ke Inggris) --- */}
-      <div className="w-full md:w-[340px] h-[60dvh] md:h-full bg-white shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r border-gray-200 flex-shrink-0">
-        <div className="p-6 border-b border-gray-100 bg-gray-50">
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Grid Stretch Tool</h1>
-          <p className="text-xs text-gray-500 mt-1 font-medium">Advanced Slit-Scan Distortion</p>
+      {/* --- PANEL KIRI (Kontrol UI dengan Dukungan Tema Terang/Gelap) --- */}
+      <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
+                      ${isDarkMode ? 'bg-[#1E1E1E] border-[#333]' : 'bg-white border-gray-200'}`}>
+        
+        {/* Header Panel */}
+        <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 ${isDarkMode ? 'bg-[#252525] border-[#333]' : 'bg-gray-50 border-gray-100'}`}>
+          <div>
+            <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Grid Stretch Tool</h1>
+            <p className={`text-xs mt-1 font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Advanced Slit-Scan Distortion</p>
+          </div>
+          {/* Tombol Tema Terang/Gelap */}
+          <button 
+             onClick={() => setIsDarkMode(!isDarkMode)} 
+             className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
+             title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+             {isDarkMode ? '☀️' : '🌙'}
+          </button>
         </div>
 
         <div className="p-6 flex-1 flex flex-col space-y-7">
           {/* Operasi Gambar */}
           <div className="space-y-4">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Image Operations</h2>
-            <button onClick={() => fileInputRef.current.click()} className="w-full bg-black text-white py-3.5 rounded-lg font-semibold hover:bg-gray-800 transition shadow-lg active:scale-95">
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Image Operations</h2>
+            <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-semibold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-gray-100 text-black hover:bg-white' : 'bg-black text-white hover:bg-gray-800'}`}>
               Upload Image
             </button>
             <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
             <div className="flex space-x-3">
-              <button onClick={handleRotate} className="flex-1 bg-gray-100 text-sm py-2.5 rounded-md hover:bg-gray-200 font-medium">↻ Rotate</button>
-              <button onClick={handleRandomize} className="flex-1 bg-gray-100 text-sm py-2.5 rounded-md hover:bg-gray-200 font-medium">🔀 Randomize</button>
+              <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#333] text-gray-200 hover:bg-[#444]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
+              <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#333] text-gray-200 hover:bg-[#444]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
             </div>
             <div className="pt-2">
-                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2">
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                     <span>Image Scale (Bleed)</span>
-                    <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-mono">{scale}%</span>
+                    <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#333] text-gray-300' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
                 </div>
-                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} />
             </div>
           </div>
-          <hr className="border-gray-200" />
+          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
           {/* Mode Seleksi */}
           <div className="space-y-4">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Effect Spread Mode</h2>
-            <div className="flex bg-gray-100 p-1 rounded-lg">
-                <button onClick={() => { setIsManualMode(false); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Auto (Random)</button>
-                <button onClick={() => setIsManualMode(true)} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}>Manual (Brush)</button>
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Effect Spread Mode</h2>
+            <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-[#333]' : 'bg-gray-100'}`}>
+                <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
+                <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
             </div>
             {isManualMode && (
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg space-y-4">
-                    <p className="text-[11px] text-blue-700 font-medium leading-relaxed">🖌️ Swipe your cursor over the image to paint the effect.</p>
+                <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-blue-900/20 border-blue-500/30' : 'bg-blue-50 border-blue-100'}`}>
+                    <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
                     <div>
-                        <div className="flex justify-between text-[10px] font-semibold text-gray-700 mb-2">
+                        <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                             <span>Brush Size</span><span>{brushSize}</span>
                         </div>
-                        <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full h-1.5 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                        <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-blue-200'}`} />
                     </div>
-                    <button onClick={clearMask} className="w-full bg-white border border-gray-300 text-gray-700 text-[11px] py-2.5 rounded-md font-bold hover:bg-gray-50">🗑️ Clear Selection</button>
+                    <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition ${isDarkMode ? 'bg-[#333] border border-[#444] text-gray-300 hover:bg-[#444]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
                 </div>
             )}
           </div>
-          <hr className="border-gray-200" />
+          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
           {/* AI */}
           <div className="space-y-3">
-             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Auto Annotation</h2>
-             <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className="w-full text-xs p-2 border border-gray-300 rounded-md focus:border-blue-500" />
-             <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`w-full text-white py-2.5 rounded-md text-sm font-semibold transition shadow-sm ${isAiAnalyzing || !image ? 'bg-gray-400' : 'bg-gray-900 hover:bg-black'}`}>{isAiAnalyzing ? 'Scanning...' : 'Scan AI'}</button>
+             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Auto Annotation</h2>
+             <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
+             <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`w-full py-2.5 rounded-md text-sm font-semibold transition shadow-sm ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500' : 'bg-gray-400 text-white') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-900 text-white hover:bg-black')}`}>{isAiAnalyzing ? 'Scanning...' : 'Scan AI'}</button>
           </div>
-          <hr className="border-gray-200" />
+          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
           {/* Parameter Slitscan */}
           <div className="space-y-5">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Slit-Scan Options</h2>
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Slit-Scan Options</h2>
             <div>
-                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2"><span>Cut Complexity</span></div>
-                <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Cut Complexity</span></div>
+                <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} />
             </div>
             <div>
-                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2"><span>Density (Empty Gaps)</span></div>
-                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" disabled={isManualMode} />
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span></div>
+                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} disabled={isManualMode} />
             </div>
             <div>
-                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2"><span>Stretch Intensity</span><span className="text-blue-600 font-bold">{stretchInt}%</span></div>
-                <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className="w-full h-1.5 bg-blue-200 rounded-lg cursor-pointer accent-blue-600" />
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Stretch Intensity</span><span className="text-blue-500 font-bold">{stretchInt}%</span></div>
+                <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-blue-200'}`} />
             </div>
             <div>
-                <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2"><span>Brutal Distortion</span><span className="text-red-600 font-bold">{brutalInt}%</span></div>
-                <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className="w-full h-1.5 bg-red-200 rounded-lg cursor-pointer accent-red-600" />
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className="text-red-500 font-bold">{brutalInt}%</span></div>
+                <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#444]' : 'bg-red-200'}`} />
             </div>
             <div className="flex items-center justify-between pt-2">
-                <span className="text-xs font-semibold text-gray-700">Stretch Direction</span>
-                <div className="flex items-center space-x-1 text-[11px] font-mono font-bold text-gray-600 bg-gray-100 p-1 rounded-md border border-gray-200">
-                    <button className={`px-3 py-1.5 rounded ${stretchDirX ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
-                    <button className={`px-3 py-1.5 rounded ${stretchDirY ? 'bg-white shadow-sm text-black' : 'text-gray-400'}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
+                <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Stretch Direction</span>
+                <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#333] border-[#444]' : 'bg-gray-100 border-gray-200'}`}>
+                    <button className={`px-3 py-1.5 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
+                    <button className={`px-3 py-1.5 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
                 </div>
             </div>
           </div>
-          <hr className="border-gray-200" />
+          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
-          {/* Tampilan */}
+          {/* Tampilan (Dengam Pemilih Warna Teks yang Dikembalikan) */}
           <div className="space-y-4">
-             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Visuals & Annotations</h2>
-             <label className="flex items-center justify-between cursor-pointer"><span className="text-sm font-semibold text-gray-700">Show Grid Lines & Blocks</span><input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4.5 h-4.5 accent-black" /></label>
-             <label className="flex items-center justify-between cursor-pointer"><span className="text-sm font-semibold text-gray-700">Show Annotation Text</span><input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-black" /></label>
+             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Visuals & Annotations</h2>
+             <label className="flex items-center justify-between cursor-pointer">
+                 <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
+                 <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4.5 h-4.5 accent-blue-600" />
+             </label>
+             <div className="space-y-3">
+                 <label className="flex items-center justify-between cursor-pointer">
+                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show Annotation Text</span>
+                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-blue-600" />
+                 </label>
+                 
+                 {/* Opsi Warna Teks yang Dikembalikan */}
+                 {showTextAnnotations && (
+                     <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                         <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Text Color</span>
+                         <input 
+                            type="color" 
+                            value={textColor} 
+                            onChange={(e) => setTextColor(e.target.value)} 
+                            className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent"
+                         />
+                     </div>
+                 )}
+             </div>
           </div>
         </div>
 
-        <div className="p-6 border-t border-gray-200 bg-gray-50">
+        <div className={`p-6 border-t transition-colors duration-200 ${isDarkMode ? 'bg-[#252525] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
            <div className="flex space-x-3">
-              <button onClick={() => handleExport('png')} className="flex-1 bg-black text-white py-3 rounded-lg font-semibold text-sm hover:bg-gray-800 transition active:scale-95">Export PNG</button>
-              <button onClick={() => handleExport('jpg')} className="flex-1 border-2 border-gray-300 text-gray-700 bg-white py-3 rounded-lg font-semibold text-sm hover:bg-gray-50 hover:border-gray-400 transition active:scale-95">Export JPG</button>
+              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-semibold text-sm transition active:scale-95 ${isDarkMode ? 'bg-gray-100 text-black hover:bg-white' : 'bg-black text-white hover:bg-gray-800'}`}>Export PNG</button>
+              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-semibold text-sm transition active:scale-95 ${isDarkMode ? 'border-[#444] bg-[#222] text-gray-300 hover:bg-[#333]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>Export JPG</button>
            </div>
         </div>
       </div>
 
-      {/* --- PANEL KANAN (PRO WORKSPACE: Gelap, Rulers, Guides, Pan/Zoom) --- */}
+      {/* --- PANEL KANAN (PRO WORKSPACE: Workspace dinamis adaptif thdp mode terang/gelap) --- */}
       <div 
-        className="flex-1 bg-[#181818] relative overflow-hidden touch-none"
+        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#181818]' : 'bg-[#E5E7EB]'}`}
         onPointerMove={handleWorkspacePointerMove}
         onPointerUp={handleWorkspacePointerUp}
         onPointerLeave={handleWorkspacePointerUp}
       >
          
-         {/* Pojok Penggaris (Kiri Atas) */}
-         <div className="absolute top-0 left-0 w-[24px] h-[24px] bg-[#222] border-b border-r border-[#333] z-50"></div>
+         {/* Pojok Penggaris */}
+         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}></div>
 
          {/* Penggaris Atas (Horizontal) Dinamis */}
          <div 
-            className="absolute top-0 left-[24px] right-0 h-[24px] bg-[#222] border-b border-[#333] z-40 overflow-hidden"
+            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'h')}
          >
-            <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} />
+            <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} isDarkMode={isDarkMode} />
          </div>
 
          {/* Penggaris Kiri (Vertikal) Dinamis */}
          <div 
-            className="absolute top-[24px] left-0 bottom-0 w-[24px] bg-[#222] border-r border-[#333] z-40 overflow-hidden"
+            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'v')}
          >
-             <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} />
+             <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
          </div>
 
-         {/* Viewport Utama (Tempat Canvas & Guides) */}
+         {/* Viewport Utama */}
          <div 
             className="absolute top-[24px] left-[24px] right-0 bottom-0 overflow-hidden"
             ref={viewportRef}
@@ -641,7 +651,6 @@ export default function App() {
                 else setViewScale(v => Math.max(v - 0.1, 0.1));
             }}
          >
-            {/* Canvas Container dengan Pan & Zoom Transform */}
             <div 
                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${viewScale})`, transformOrigin: 'center' }}
                className={`w-full h-full flex items-center justify-center transition-transform duration-75
@@ -650,7 +659,7 @@ export default function App() {
                <canvas ref={canvasRef} className="shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-white object-contain" />
             </div>
 
-            {/* Lapisan Guidelines Overlay */}
+            {/* Lapisan Garis Bantu (Guidelines) */}
             {guides.map(g => (
                <div 
                   key={g.id}
@@ -664,17 +673,17 @@ export default function App() {
             ))}
          </div>
 
-         {/* --- FLOATING TOOLBAR KIRI (Tools Panel) --- */}
-         <div className="absolute top-[44px] left-[44px] bg-[#2D2D2D] border border-[#444] rounded-md shadow-2xl flex flex-col z-50 overflow-hidden">
+         {/* --- FLOATING TOOLBAR KIRI (Toolbar transparan layaknya aplikasi Pro) --- */}
+         <div className="absolute top-[44px] left-[44px] bg-[#2D2D2D]/95 backdrop-blur-sm border border-[#444] rounded-md shadow-2xl flex flex-col z-50 overflow-hidden">
             <button 
                 className={`p-3 transition flex items-center justify-center ${activeTool==='pan'?'bg-blue-600 text-white':'text-gray-400 hover:text-white hover:bg-[#444]'}`}
-                onClick={() => setActiveTool('pan')} title="Move Tool (Pan)"
+                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
             </button>
             <button 
                 className={`p-3 transition flex items-center justify-center ${activeTool==='brush'?'bg-blue-600 text-white':'text-gray-400 hover:text-white hover:bg-[#444]'}`}
-                onClick={() => { setActiveTool('brush'); setIsManualMode(true); }} title="Brush Tool (Paint Area)"
+                onClick={() => { setActiveTool('brush'); setIsManualMode(true); }} title="Brush Tool (Paint Effect Area)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
             </button>
@@ -688,7 +697,7 @@ export default function App() {
          </div>
 
          {/* --- FLOATING ZOOM PANEL KANAN BAWAH --- */}
-         <div className="absolute bottom-6 right-6 bg-[#2D2D2D] text-gray-300 text-xs rounded shadow-2xl flex items-center border border-[#444] overflow-hidden z-50">
+         <div className="absolute bottom-6 right-6 bg-[#2D2D2D]/95 backdrop-blur-sm text-gray-300 text-xs rounded shadow-2xl flex items-center border border-[#444] overflow-hidden z-50">
             <button className="px-4 py-3 hover:bg-[#444] transition font-bold" onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
             <span className="px-3 font-mono border-x border-[#444] min-w-[65px] text-center">{Math.round(viewScale * 100)}%</span>
             <button className="px-4 py-3 hover:bg-[#444] transition font-bold" onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
