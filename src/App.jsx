@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- Generator Angka Acak Konsisten (Seeded RNG) ---
 function mulberry32(a) {
@@ -17,12 +17,19 @@ export default function App() {
   const [seed, setSeed] = useState(12345);
   const [isDragging, setIsDragging] = useState(false);
   
+  // Kontrol Baru: Mode Interaktif / Kuas Seleksi
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [brushSize, setBrushSize] = useState(50);
+  const maskPointsRef = useRef([]); // Menyimpan jejak usapan kursor
+  const isPaintingRef = useRef(false);
+  const animationFrameId = useRef(null);
+
   // Kontrol Slider
-  const [scale, setScale] = useState(80); // Logika Video: 100 = Penuh, <100 = Mengecil di tengah (Bleed)
+  const [scale, setScale] = useState(80); 
   const [complexity, setComplexity] = useState(60); 
   const [density, setDensity] = useState(65);       
   const [stretchInt, setStretchInt] = useState(72); 
-  const [brutalInt, setBrutalInt] = useState(25); // Tingkat tebal tarikan
+  const [brutalInt, setBrutalInt] = useState(25); 
   const [stretchDirX, setStretchDirX] = useState(true);
   const [stretchDirY, setStretchDirY] = useState(true);
   const [showGridLines, setShowGridLines] = useState(true);
@@ -43,6 +50,13 @@ export default function App() {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // --- Pembersihan Memori Animasi ---
+  useEffect(() => {
+    return () => {
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+    };
+  }, []);
+
   // --- Fungsi Penanganan File ---
   const processFile = (file) => {
     if (file && file.type.startsWith('image/')) {
@@ -52,6 +66,7 @@ export default function App() {
         img.onload = () => {
           setImage(img);
           setSeed(Math.random() * 10000); 
+          maskPointsRef.current = []; // Reset seleksi saat ganti gambar
         };
         img.src = event.target.result;
       };
@@ -65,12 +80,14 @@ export default function App() {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]);
   };
 
-  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
+  const handleRotate = () => {
+      setRotation((prev) => (prev + 90) % 360);
+      maskPointsRef.current = []; // Reset seleksi karena orientasi berubah
+  };
+  
   const handleRandomize = () => setSeed(Math.random() * 10000);
   
   const handleExport = (format) => {
@@ -150,12 +167,51 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-     setAiWords(fallbackWords[annoLang]);
-     handleRandomize();
-  }, [annoLang]);
+  // --- LOGIKA EVENT POINTER (INTERAKSI KUAS) ---
+  const handlePointerDown = (e) => {
+      if (!isManualMode || !image) return;
+      isPaintingRef.current = true;
+      e.target.setPointerCapture(e.pointerId);
+      addMaskPoint(e);
+  };
 
-  // --- LOGIKA UTAMA (TRUE SLIT-SCAN BERBASIS KISI) ---
+  const handlePointerMove = (e) => {
+      if (!isPaintingRef.current || !isManualMode || !image) return;
+      addMaskPoint(e);
+  };
+
+  const handlePointerUp = (e) => {
+      if (!isPaintingRef.current) return;
+      isPaintingRef.current = false;
+      e.target.releasePointerCapture(e.pointerId);
+  };
+
+  const addMaskPoint = (e) => {
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      
+      // Mengubah koordinat layar menjadi persentase relatif (0.0 - 1.0) agar konsisten pada berbagai resolusi
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      
+      maskPointsRef.current.push({ nx, ny, radius: brushSize });
+      
+      // Update kanvas secara real-time yang optimal (Throttling dengan RequestAnimationFrame)
+      if (!animationFrameId.current) {
+          animationFrameId.current = requestAnimationFrame(() => {
+              drawCanvas();
+              animationFrameId.current = null;
+          });
+      }
+  };
+
+  const clearMask = () => {
+      maskPointsRef.current = [];
+      drawCanvas();
+  };
+
+
+  // --- LOGIKA UTAMA (TRUE SLIT-SCAN & MASKING) ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -179,31 +235,27 @@ export default function App() {
     const rng = mulberry32(seed);
     const isRotated = rotation % 180 !== 0;
     
-    // --- 1. RESOLUSI ASLI GAMBAR (Untuk Ekspor Super Jernih) ---
-    // Kanvas output akan sama persis ukurannya dengan ukuran file asli gambar
+    // 1. RESOLUSI ASLI GAMBAR (Native HD)
     canvas.width = isRotated ? image.height : image.width;
     canvas.height = isRotated ? image.width : image.height;
     
-    const relScale = Math.max(1, canvas.width / 1000); // Rasio agar tebal garis/font tetap proporsional
+    const relScale = Math.max(1, canvas.width / 1000); 
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
-    ctx.fillStyle = '#FFFFFF'; // Background dasar (di video menggunakan latar putih bersih)
+    ctx.fillStyle = '#FFFFFF'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // --- 2. KANVAS SUMBER (LOGIKA "SHRINK & BLEED" DARI VIDEO) ---
+    // 2. KANVAS SUMBER (SHRINK & BLEED)
     const offscreen = document.createElement('canvas');
     offscreen.width = canvas.width;
     offscreen.height = canvas.height;
     const offCtx = offscreen.getContext('2d');
     
-    // Background dibiarkan transparan atau putih agar potongan kosong tidak menarik gambar lama
     offCtx.fillStyle = '#FFFFFF';
     offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
 
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    
-    // Logika Video: Skala (10-100%) mengecilkan gambar di TENGAH, menyisakan ruang kosong di pinggir
     const scaleFactor = scale / 100; 
     const drawW = Math.floor(image.width * scaleFactor);
     const drawH = Math.floor(image.height * scaleFactor);
@@ -211,11 +263,10 @@ export default function App() {
     offCtx.save();
     offCtx.translate(centerX, centerY);
     offCtx.rotate((rotation * Math.PI) / 180);
-    // Draw tepat di tengah berdasarkan dimensi gambar yang diperkecil
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    // --- 3. PEMBUATAN MATRIKS KISI ---
+    // 3. PEMBUATAN MATRIKS KISI
     const numCols = Math.floor(10 + (complexity / 100) * 80);
     const numRows = Math.floor(10 + (complexity / 100) * 80);
     
@@ -229,11 +280,22 @@ export default function App() {
 
     const pStretch = (stretchInt / 100); 
     const pEmpty = (1 - (density / 100)) * 0.6; 
-    
-    // Karena kanvas ini beresolusi sangat tinggi, kita scale brutalInt
     const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
 
-    // --- 4. RENDER EFEK SLIT-SCAN (Menarik Tepi Gambar) ---
+    // Fungsi Pengecekan Area Seleksi (Masking Intersection)
+    const checkMask = (testNX, testNY) => {
+        if (maskPointsRef.current.length === 0) return false;
+        const aspect = canvas.width / canvas.height;
+        for (let pt of maskPointsRef.current) {
+            const normRadius = (pt.radius / 100) * 0.10; // Mengubah nilai kuas menjadi radius
+            const dx = pt.nx - testNX;
+            const dy = (pt.ny - testNY) / aspect; 
+            if (Math.sqrt(dx*dx + dy*dy) < normRadius) return true;
+        }
+        return false;
+    };
+
+    // 4. RENDER EFEK SLIT-SCAN
     for (let i = 0; i < xCuts.length - 1; i++) {
         for (let j = 0; j < yCuts.length - 1; j++) {
             const x = xCuts[i];
@@ -245,22 +307,37 @@ export default function App() {
 
             const dstW = w + 1;
             const dstH = h + 1;
-            const r = rng();
+            
+            const cellCenterNX = (x + w / 2) / canvas.width;
+            const cellCenterNY = (y + h / 2) / canvas.height;
 
-            if (r < pEmpty) {
-                // CELAH PUTIH
+            let applyStretch = false;
+            let applyEmpty = false;
+
+            // KONDISI MODE MANUAL VS OTOMATIS
+            if (isManualMode) {
+                applyStretch = checkMask(cellCenterNX, cellCenterNY);
+                applyEmpty = false; // Tanpa celah putih di mode manual agar fokus pada gambar dan distorsi
+            } else {
+                const r = rng();
+                if (r < pEmpty) applyEmpty = true;
+                else if (r < pEmpty + pStretch) applyStretch = true;
+            }
+
+            if (applyEmpty) {
+                // CELAH PUTIH (Hanya muncul di Mode Otomatis)
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillRect(x, y, dstW, dstH);
             } 
-            else if (r < pEmpty + pStretch) {
-                // SLIT-SCAN (Karena gambar di tengah mengecil, tarikan ini akan melebar ke ujung kanvas)
+            else if (applyStretch) {
+                // SLIT-SCAN EFFECT
                 let isHoriz = rng() > 0.5;
                 if (!stretchDirX && stretchDirY) isHoriz = false;
                 if (stretchDirX && !stretchDirY) isHoriz = true;
                 const isBrutal = rng() < (brutalInt / 100);
 
                 if (isHoriz && stretchDirX) {
-                    let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); // Slice setipis mungkin untuk pure pixel stretch
+                    let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); 
                     let srcX = rng() > 0.5 ? x : (x + w - sliceW); 
                     
                     if (isBrutal) {
@@ -287,28 +364,38 @@ export default function App() {
                 }
             } 
             else {
+                // GAMBAR NORMAL ASLI
                 ctx.drawImage(offscreen, x, y, w, h, x, y, dstW, dstH);
             }
         }
     }
 
-    // --- 5. DEKORASI (Garis & Font yang dikalibrasi ke Resolusi Asli) ---
+    // 5. DEKORASI (Garis Kisi & Font - Dibatasi pada area mask jika Mode Manual)
     if (showGridLines) {
         ctx.fillStyle = '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
         
         xCuts.forEach(x => {
-           if(rng() > 0.8) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+           if(rng() > 0.8) { 
+               if(isManualMode && !checkMask(x/canvas.width, 0.5)) return; // Simple filter
+               ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); 
+           }
         });
         yCuts.forEach(y => {
-           if(rng() > 0.8) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+           if(rng() > 0.8) { 
+               if(isManualMode && !checkMask(0.5, y/canvas.height)) return;
+               ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); 
+           }
         });
 
         // Balok Hitam Dekoratif
         for (let i = 0; i < 5; i++) {
             const bx = xCuts[Math.floor(rng() * (xCuts.length - 2))];
             const by = yCuts[Math.floor(rng() * (yCuts.length - 2))];
+            
+            if (isManualMode && !checkMask(bx/canvas.width, by/canvas.height)) continue;
+
             const bw = ((rng() > 0.5) ? (rng() * 100 + 20) : (xCuts[xCuts.indexOf(bx) + 1] - bx));
             const bh = ((rng() > 0.5) ? (rng() * 100 + 20) : (yCuts[yCuts.indexOf(by) + 1] - by));
             if (rng() > 0.3) ctx.fillRect(bx, by, bw, bh);
@@ -320,7 +407,6 @@ export default function App() {
         const maxAnnotations = Math.floor(15 * (density/100));
         let count = 0;
 
-        // Auto Scaling Font Size berdasarkan lebar kanvas asli gambar
         const mainFont = Math.max(12, Math.floor(18 * relScale * 0.8));
         const subFont = Math.max(8, Math.floor(12 * relScale * 0.8));
         const spacing1 = Math.floor(10 * relScale * 0.8);
@@ -335,29 +421,34 @@ export default function App() {
                 const y = yCuts[j];
                 const x = xCuts[Math.floor(rng() * (xCuts.length - 5)) + 2];
                 
+                // Mencegah teks muncul di luar area seleksi saat Mode Manual
+                if (isManualMode && !checkMask(x/canvas.width, y/canvas.height)) continue;
+                
                 const word = aiWords[Math.floor(rng() * aiWords.length)];
                 const num = Math.floor(rng() * 50) + 1;
                 
                 ctx.fillStyle = textColor;
-                
                 ctx.font = `900 ${mainFont}px monospace`;
                 ctx.fillText(word, x, y - spacing1);
                 
                 ctx.font = `${subFont}px monospace`;
                 ctx.fillText(`${num}+`, x, y + spacing2);
-                
                 ctx.fillRect(x, y + spacing3, barWidth, barHeight);
                 count++;
             }
         }
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor]);
+  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize]);
 
+  // Efek ganda untuk memastikan kanvas merender ulang setiap mode diganti
   useEffect(() => {
     drawCanvas();
-    window.addEventListener('resize', drawCanvas);
-    return () => window.removeEventListener('resize', drawCanvas);
   }, [drawCanvas]);
+
+  useEffect(() => {
+     setAiWords(fallbackWords[annoLang]);
+     handleRandomize();
+  }, [annoLang]);
 
 
   return (
@@ -401,9 +492,58 @@ export default function App() {
                     <span>Skala Gambar (Zoom)</span>
                     <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-mono">{scale}%</span>
                 </div>
-                {/* Skala dirubah menjadi 10-100% untuk efek shrinking seperti di video */}
                 <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
             </div>
+          </div>
+
+          <hr className="border-gray-200" />
+
+          {/* FITUR BARU: Mode Seleksi (Manual / Otomatis) */}
+          <div className="space-y-4">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Mode Penyebaran Efek</h2>
+            
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button 
+                    onClick={() => { setIsManualMode(false); handleRandomize(); }}
+                    className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    Otomatis (Acak)
+                </button>
+                <button 
+                    onClick={() => setIsManualMode(true)}
+                    className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    Manual (Kuas)
+                </button>
+            </div>
+
+            {/* Menu Khusus Mode Manual */}
+            {isManualMode && (
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg space-y-4 animate-fade-in">
+                    <p className="text-[11px] text-blue-700 font-medium leading-relaxed">
+                        🖌️ <span className="font-bold">Mode Interaktif Aktif:</span> Usap kursor Anda di atas gambar (kanvas kanan) untuk "melukis" efek Slit-Scan pada area spesifik saja.
+                    </p>
+                    
+                    <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-gray-700 mb-2">
+                            <span>Ukuran Kuas (Brush Size)</span>
+                            <span>{brushSize}</span>
+                        </div>
+                        <input 
+                            type="range" min="10" max="150" value={brushSize} 
+                            onChange={(e) => setBrushSize(Number(e.target.value))} 
+                            className="w-full h-1.5 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+                        />
+                    </div>
+                    
+                    <button 
+                        onClick={clearMask}
+                        className="w-full bg-white border border-gray-300 text-gray-700 text-[11px] py-2.5 rounded-md font-bold hover:bg-gray-50 hover:border-gray-400 transition active:scale-95"
+                    >
+                        🗑️ Bersihkan Seleksi
+                    </button>
+                </div>
+            )}
           </div>
 
           <hr className="border-gray-200" />
@@ -425,7 +565,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Input API Key GitHub */}
             <div className="mb-3">
                 <input 
                   type="password" 
@@ -434,13 +573,12 @@ export default function App() {
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   className="w-full text-xs p-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
-                <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline mt-1 inline-block">Dapatkan API Token GitHub di sini</a>
             </div>
             
             <div className="flex items-center gap-3">
                 <div className="flex-1 border border-gray-200 rounded-lg p-2.5 flex justify-between items-center bg-gray-50 shadow-sm">
                     <span className="text-sm font-semibold text-gray-700">Analisis Otomatis</span>
-                    <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-full">GITHUB MODELS</span>
+                    <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-1 rounded-full">GITHUB</span>
                 </div>
                 <button 
                     onClick={handleAiAnalysis}
@@ -450,7 +588,6 @@ export default function App() {
                     {isAiAnalyzing ? 'Memindai...' : 'Scan AI'}
                 </button>
             </div>
-            <p className="text-[11px] text-gray-500 mt-2 font-medium">Teks yang dihasilkan: <span className="text-blue-600 font-bold">{aiWords.length} kata</span> ({annoLang}).</p>
           </div>
 
           <hr className="border-gray-200" />
@@ -468,9 +605,9 @@ export default function App() {
 
             <div>
                 <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2">
-                    <span>Kepadatan (Sedikit Celah Putih)</span>
+                    <span>Kepadatan Efek (Hanya Mode Acak)</span>
                 </div>
-                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
+                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" disabled={isManualMode} />
             </div>
           </div>
 
@@ -488,14 +625,12 @@ export default function App() {
                 <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className="w-full h-1.5 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
             </div>
 
-            {/* TINGKAT BRUTAL */}
             <div>
                 <div className="flex justify-between text-xs font-semibold text-gray-700 mb-2">
                     <span>Tingkat Distorsi (Brutal)</span>
                     <span className="font-mono font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">{brutalInt}%</span>
                 </div>
                 <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className="w-full h-1.5 bg-red-200 rounded-lg appearance-none cursor-pointer accent-red-600" />
-                <p className="text-[10px] text-gray-400 mt-1">Mengontrol ketebalan tarikan & efek glitch.</p>
             </div>
 
             <div className="flex items-center justify-between pt-2">
@@ -531,7 +666,6 @@ export default function App() {
                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-black cursor-pointer rounded" />
                  </label>
                  
-                 {/* Color Picker untuk Teks Anotasi */}
                  {showTextAnnotations && (
                      <div className="flex items-center justify-between pl-2 border-l-2 border-gray-200 ml-1">
                          <span className="text-xs font-medium text-gray-500">Warna Teks</span>
@@ -560,29 +694,33 @@ export default function App() {
       {/* PANEL KANAN (Kanvas Workspace) */}
       <div className="flex-1 w-full h-[40dvh] md:h-full p-4 md:p-8 flex items-center justify-center bg-[#F3F4F6] relative overflow-hidden">
          
-         {/* Overlay saat drag and drop */}
          {isDragging && (
            <div className="absolute inset-0 bg-blue-500 bg-opacity-20 z-50 flex items-center justify-center border-4 border-dashed border-blue-500 m-8 rounded-3xl pointer-events-none transition-all duration-200 backdrop-blur-sm">
              <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center transform scale-110">
                <span className="text-5xl mb-4">📥</span>
                <span className="text-2xl font-black text-gray-800">Lepaskan Gambar Di Sini</span>
-               <span className="text-sm text-gray-500 mt-2 font-medium">Gambar akan langsung diproses</span>
              </div>
            </div>
          )}
          
-         {/* Canvas Container: Mempertahankan responsivitas layar sekaligus menjaga gambar beresolusi super tinggi */}
-         <div className="w-full h-full flex items-center justify-center">
+         {/* Canvas Container dengan Penanganan Event Pointer Untuk Kuas */}
+         <div className="w-full h-full flex items-center justify-center relative touch-none">
             <canvas 
                 ref={canvasRef} 
-                className="shadow-2xl rounded-sm ring-1 ring-gray-900/5 transition-transform"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
+                className={`shadow-2xl rounded-sm ring-1 ring-gray-900/5 transition-transform 
+                            ${isManualMode ? 'cursor-crosshair' : 'cursor-default'}`}
                 style={{ 
                     maxWidth: '100%', 
                     maxHeight: '100%', 
                     width: 'auto', 
                     height: 'auto', 
                     objectFit: 'contain', 
-                    imageRendering: brutalInt > 50 ? 'pixelated' : 'auto' 
+                    imageRendering: brutalInt > 50 ? 'pixelated' : 'auto',
+                    touchAction: isManualMode ? 'none' : 'auto' // Mencegah layar HP terscroll saat mengusap kanvas di Mode Manual
                 }}
             />
          </div>
