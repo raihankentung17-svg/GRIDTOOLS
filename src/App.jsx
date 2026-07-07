@@ -133,11 +133,18 @@ export default function App() {
   const [showGridLines, setShowGridLines] = useState(true);
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
   const [textColor, setTextColor] = useState('#000000'); 
+  
+  // --- STATE AI YANG DIPULIHKAN ---
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
 
-  const fallbackWords = ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'];
-  const [aiWords, setAiWords] = useState(fallbackWords);
+  const fallbackWords = {
+    'ID': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
+    'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
+    'JP': ['緑', '葉', '自然', 'テキスト', 'シンプル', 'デザイン', 'グリッド', '植物', '枝', 'フラット', 'クリア', 'ストレッチ']
+  };
+  const [aiWords, setAiWords] = useState(fallbackWords['EN']);
 
   useEffect(() => {
     const updateSize = () => {
@@ -153,6 +160,13 @@ export default function App() {
   useEffect(() => {
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, []);
+
+  // Memastikan AI Word berubah saat bahasa diganti
+  useEffect(() => {
+     setAiWords(fallbackWords[annoLang]);
+     handleRandomize();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annoLang]);
 
   // --- Fungsi Penanganan File ---
   const processFile = (file) => {
@@ -186,7 +200,76 @@ export default function App() {
     link.click();
   };
 
-  const handleAiAnalysis = async () => { /* Logic AI tidak dirubah */ };
+  // --- LOGIKA AI YANG DIPULIHKAN PENUH ---
+  const handleAiAnalysis = async () => {
+    if (!image) return; 
+    
+    if (!apiKeyInput || apiKeyInput.trim() === '') {
+        alert("Please enter your GitHub Token (API Key) first.");
+        return;
+    }
+
+    setIsAiAnalyzing(true);
+    
+    try {
+        // Buat kanvas sementara untuk kompresi sebelum dikirim ke AI
+        const tempCanvas = document.createElement('canvas');
+        const MAX_SIZE = 600;
+        let w = image.width;
+        let h = image.height;
+        if (w > MAX_SIZE || h > MAX_SIZE) {
+            const ratio = Math.min(MAX_SIZE / w, MAX_SIZE / h);
+            w *= ratio;
+            h *= ratio;
+        }
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(image, 0, 0, w, h);
+        
+        const base64Data = `data:image/jpeg;base64,${tempCanvas.toDataURL('image/jpeg', 0.8).split(',')[1]}`;
+        const apiKey = apiKeyInput.trim(); 
+        const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
+        const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS (if applicable). No intro, no outro, no markdown.`;
+        
+        // Fetch ke GitHub Models (Azure Inference AI)
+        const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini", 
+                messages: [
+                    { role: "user", content: [ { type: "text", text: promptText }, { type: "image_url", image_url: { url: base64Data } } ] }
+                ]
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || data.error?.message || `API Error: ${response.status}`);
+        
+        let text = data.choices?.[0]?.message?.content;
+        if (text) {
+            text = text.replace(/`/g, '').replace(/csv/g, '').trim();
+            const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
+            if (words.length > 0) {
+                setAiWords(words);
+                alert("GitHub AI Analysis Successful!");
+            }
+        } else {
+             throw new Error("Empty response from AI.");
+        }
+    } catch (err) {
+        console.error("AI API Error:", err);
+        alert(`Failed to analyze image via GitHub Models.\n\nError: ${err.message}`);
+        setAiWords(fallbackWords[annoLang]);
+    } finally {
+        setIsAiAnalyzing(false);
+        handleRandomize(); 
+    }
+  };
 
   // --- LOGIKA EVENT WORKSPACE (PAN, BRUSH & GUIDELINES) ---
   const handleWorkspacePointerDown = (e) => {
@@ -539,11 +622,55 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
-          {/* AI */}
+          {/* AI (DIPULIHKAN PENUH) */}
           <div className="space-y-3">
-             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Auto Annotation</h2>
-             <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
-             <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`w-full py-2.5 rounded-md text-sm font-semibold transition shadow-sm ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500' : 'bg-gray-400 text-white') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-900 text-white hover:bg-black')}`}>{isAiAnalyzing ? 'Scanning...' : 'Scan AI'}</button>
+             <div className="flex items-center justify-between mb-2">
+                 <h2 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Auto Annotation</h2>
+                 
+                 {/* Pilihan Bahasa yang Dipulihkan */}
+                 <div className={`flex p-1 rounded-md ${isDarkMode ? 'bg-[#333]' : 'bg-gray-100'}`}>
+                     {['EN', 'JP', 'ID'].map(lang => (
+                         <button 
+                           key={lang}
+                           onClick={() => setAnnoLang(lang)}
+                           className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600')}`}
+                         >
+                           {lang}
+                         </button>
+                     ))}
+                 </div>
+             </div>
+             
+             <div>
+                 <input 
+                     type="password" 
+                     placeholder="GitHub Token (ghp_...)" 
+                     value={apiKeyInput} 
+                     onChange={(e) => setApiKeyInput(e.target.value)} 
+                     className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} 
+                 />
+                 {/* Link Token GitHub yang Dipulihkan */}
+                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                     Get GitHub API Token here
+                 </a>
+             </div>
+             
+             <div className="flex items-center gap-3 pt-1">
+                 <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#252525] border-[#444]' : 'bg-gray-50 border-gray-200'}`}>
+                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Auto Analysis</span>
+                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isDarkMode ? 'bg-[#444] text-gray-300' : 'bg-gray-800 text-white'}`}>GITHUB</span>
+                 </div>
+                 <button 
+                     onClick={handleAiAnalysis} 
+                     disabled={isAiAnalyzing || !image} 
+                     className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500 cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}
+                 >
+                     {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
+                 </button>
+             </div>
+             <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                 Generated texts: <span className="text-blue-500 font-bold">{aiWords.length} words</span> ({annoLang}).
+             </p>
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
@@ -576,7 +703,7 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
-          {/* Tampilan (Dengam Pemilih Warna Teks yang Dikembalikan) */}
+          {/* Tampilan */}
           <div className="space-y-4">
              <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Visuals & Annotations</h2>
              <label className="flex items-center justify-between cursor-pointer">
