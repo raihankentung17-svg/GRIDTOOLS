@@ -134,7 +134,7 @@ export default function App() {
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
   const [textColor, setTextColor] = useState('#000000'); 
   
-  // --- STATE AI YANG DIPULIHKAN ---
+  // --- STATE AI ---
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
@@ -161,7 +161,6 @@ export default function App() {
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, []);
 
-  // Memastikan AI Word berubah saat bahasa diganti
   useEffect(() => {
      setAiWords(fallbackWords[annoLang]);
      handleRandomize();
@@ -200,30 +199,18 @@ export default function App() {
     link.click();
   };
 
-  // --- LOGIKA AI YANG DIPULIHKAN PENUH ---
+  // --- LOGIKA AI ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
-    
-    if (!apiKeyInput || apiKeyInput.trim() === '') {
-        alert("Please enter your GitHub Token (API Key) first.");
-        return;
-    }
-
+    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your GitHub Token (API Key) first."); return; }
     setIsAiAnalyzing(true);
     
     try {
-        // Buat kanvas sementara untuk kompresi sebelum dikirim ke AI
         const tempCanvas = document.createElement('canvas');
         const MAX_SIZE = 600;
-        let w = image.width;
-        let h = image.height;
-        if (w > MAX_SIZE || h > MAX_SIZE) {
-            const ratio = Math.min(MAX_SIZE / w, MAX_SIZE / h);
-            w *= ratio;
-            h *= ratio;
-        }
-        tempCanvas.width = w;
-        tempCanvas.height = h;
+        let w = image.width; let h = image.height;
+        if (w > MAX_SIZE || h > MAX_SIZE) { const ratio = Math.min(MAX_SIZE / w, MAX_SIZE / h); w *= ratio; h *= ratio; }
+        tempCanvas.width = w; tempCanvas.height = h;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
@@ -232,19 +219,10 @@ export default function App() {
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS (if applicable). No intro, no outro, no markdown.`;
         
-        // Fetch ke GitHub Models (Azure Inference AI)
         const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "gpt-4o-mini", 
-                messages: [
-                    { role: "user", content: [ { type: "text", text: promptText }, { type: "image_url", image_url: { url: base64Data } } ] }
-                ]
-            })
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: "gpt-4o-mini", messages: [ { role: "user", content: [ { type: "text", text: promptText }, { type: "image_url", image_url: { url: base64Data } } ] } ] })
         });
 
         const data = await response.json();
@@ -254,21 +232,13 @@ export default function App() {
         if (text) {
             text = text.replace(/`/g, '').replace(/csv/g, '').trim();
             const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
-            if (words.length > 0) {
-                setAiWords(words);
-                alert("GitHub AI Analysis Successful!");
-            }
-        } else {
-             throw new Error("Empty response from AI.");
-        }
+            if (words.length > 0) { setAiWords(words); alert("GitHub AI Analysis Successful!"); }
+        } else throw new Error("Empty response from AI.");
     } catch (err) {
         console.error("AI API Error:", err);
         alert(`Failed to analyze image via GitHub Models.\n\nError: ${err.message}`);
         setAiWords(fallbackWords[annoLang]);
-    } finally {
-        setIsAiAnalyzing(false);
-        handleRandomize(); 
-    }
+    } finally { setIsAiAnalyzing(false); handleRandomize(); }
   };
 
   // --- LOGIKA EVENT WORKSPACE (PAN, BRUSH & GUIDELINES) ---
@@ -306,13 +276,11 @@ export default function App() {
     if (draggingGuide) {
       const rect = viewportRef.current.getBoundingClientRect();
       const screenPos = draggingGuide.type === 'h' ? e.clientY - rect.top : e.clientX - rect.left;
-      
       if (screenPos < 0 || (draggingGuide.type === 'h' ? screenPos > rect.height : screenPos > rect.width)) {
           setGuides(prev => prev.filter(g => g.id !== draggingGuide.id));
       }
       setDraggingGuide(null);
     }
-    
     if (isPanning) setIsPanning(false);
     if (isPaintingRef.current) isPaintingRef.current = false;
     e.target.releasePointerCapture(e.pointerId);
@@ -339,18 +307,14 @@ export default function App() {
       const nx = (e.clientX - rect.left) / rect.width;
       const ny = (e.clientY - rect.top) / rect.height;
       maskPointsRef.current.push({ nx, ny, radius: brushSize });
-      
       if (!animationFrameId.current) {
-          animationFrameId.current = requestAnimationFrame(() => {
-              drawCanvas();
-              animationFrameId.current = null;
-          });
+          animationFrameId.current = requestAnimationFrame(() => { drawCanvas(); animationFrameId.current = null; });
       }
   };
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
 
-  // --- LOGIKA UTAMA RENDER CANVAS (SLIT-SCAN) ---
+  // --- LOGIKA UTAMA RENDER CANVAS (SISTEM 2-PASS BARU) ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -358,14 +322,10 @@ export default function App() {
     
     if (!image) {
       const rect = canvas.parentElement.getBoundingClientRect();
-      canvas.width = rect.width || 800;
-      canvas.height = rect.height || 600;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '24px sans-serif';
-      ctx.fillStyle = '#9CA3AF';
+      canvas.width = rect.width || 800; canvas.height = rect.height || 600;
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '24px sans-serif'; ctx.fillStyle = '#9CA3AF';
       ctx.fillText('Please upload an image from the left panel', canvas.width/2, canvas.height/2);
       return;
     }
@@ -382,11 +342,9 @@ export default function App() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     const offscreen = document.createElement('canvas');
-    offscreen.width = canvas.width;
-    offscreen.height = canvas.height;
+    offscreen.width = canvas.width; offscreen.height = canvas.height;
     const offCtx = offscreen.getContext('2d');
-    offCtx.fillStyle = '#FFFFFF';
-    offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+    offCtx.fillStyle = '#FFFFFF'; offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
 
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
@@ -411,7 +369,11 @@ export default function App() {
     for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
     yCuts.sort((a,b) => a - b);
 
-    const pStretch = (stretchInt / 100); 
+    // LOGIKA MULTIPLIER BARU: 
+    // - stretchProb: Peluang kotak akan ditarik (Maks 100%)
+    // - stretchMultiplier: Panjang ekstensi tarikan (Aktif jika slider > 100%, naik hingga 15x lipat!)
+    const stretchProb = Math.min(stretchInt, 100) / 100; 
+    const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
     const pEmpty = (1 - (density / 100)) * 0.6; 
     const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
 
@@ -420,23 +382,23 @@ export default function App() {
         const aspect = canvas.width / canvas.height;
         for (let pt of maskPointsRef.current) {
             const normRadius = (pt.radius / 100) * 0.10; 
-            const dx = pt.nx - testNX;
-            const dy = (pt.ny - testNY) / aspect; 
+            const dx = pt.nx - testNX; const dy = (pt.ny - testNY) / aspect; 
             if (Math.sqrt(dx*dx + dy*dy) < normRadius) return true;
         }
         return false;
     };
 
+    // Arrays untuk Sistem Rendering 2-Pass (Mencegah tarikan tertimpa grid normal)
+    const normalPass = [];
+    const stretchPass = [];
+
     for (let i = 0; i < xCuts.length - 1; i++) {
         for (let j = 0; j < yCuts.length - 1; j++) {
-            const x = xCuts[i];
-            const y = yCuts[j];
-            const w = xCuts[i+1] - x;
-            const h = yCuts[j+1] - y;
+            const x = xCuts[i]; const y = yCuts[j];
+            const w = xCuts[i+1] - x; const h = yCuts[j+1] - y;
             if (w < 1 || h < 1) continue;
 
-            const dstW = w + 1;
-            const dstH = h + 1;
+            const dstW = w + 1; const dstH = h + 1;
             const cellCenterNX = (x + w / 2) / canvas.width;
             const cellCenterNY = (y + h / 2) / canvas.height;
 
@@ -448,12 +410,11 @@ export default function App() {
             } else {
                 const r = rng();
                 if (r < pEmpty) applyEmpty = true;
-                else if (r < pEmpty + pStretch) applyStretch = true;
+                else if (r < pEmpty + stretchProb) applyStretch = true;
             }
 
             if (applyEmpty) {
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(x, y, dstW, dstH);
+                normalPass.push({ type: 'empty', x, y, dstW, dstH });
             } 
             else if (applyStretch) {
                 let isHoriz = rng() > 0.5;
@@ -461,36 +422,56 @@ export default function App() {
                 if (stretchDirX && !stretchDirY) isHoriz = true;
                 const isBrutal = rng() < (brutalInt / 100);
 
-                if (isHoriz && stretchDirX) {
-                    let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); 
-                    let srcX = rng() > 0.5 ? x : (x + w - sliceW); 
-                    if (isBrutal) {
+                let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); 
+                let sliceH = Math.max(1, Math.floor(1 * relScale * 0.5)); 
+                let srcX = rng() > 0.5 ? x : (x + w - sliceW); 
+                let srcY = rng() > 0.5 ? y : (y + h - sliceH); 
+
+                if (isBrutal) {
+                    if (isHoriz) {
                         sliceW = Math.floor(rng() * maxThick) + 1;
                         if (sliceW > w) sliceW = w;
                         if (rng() > 0.4) srcX = x + Math.floor(rng() * (w - sliceW));
-                    }
-                    if(srcX < x) srcX = x;
-                    ctx.drawImage(offscreen, srcX, y, sliceW, h, x, y, dstW, dstH);
-                } 
-                else if (!isHoriz && stretchDirY) {
-                    let sliceH = Math.max(1, Math.floor(1 * relScale * 0.5));
-                    let srcY = rng() > 0.5 ? y : (y + h - sliceH);
-                    if (isBrutal) {
+                    } else {
                         sliceH = Math.floor(rng() * maxThick) + 1;
                         if (sliceH > h) sliceH = h;
                         if (rng() > 0.4) srcY = y + Math.floor(rng() * (h - sliceH));
                     }
-                    if(srcY < y) srcY = y;
-                    ctx.drawImage(offscreen, x, srcY, w, sliceH, x, y, dstW, dstH);
-                } else {
-                    ctx.drawImage(offscreen, x, y, w, h, x, y, dstW, dstH);
                 }
+                if(srcX < x) srcX = x;
+                if(srcY < y) srcY = y;
+
+                stretchPass.push({ isHoriz, srcX, srcY, sliceW, sliceH, x, y, w, h, dstW, dstH });
             } else {
-                ctx.drawImage(offscreen, x, y, w, h, x, y, dstW, dstH);
+                normalPass.push({ type: 'normal', x, y, w, h, dstW, dstH });
             }
         }
     }
 
+    // Eksekusi Pass 1 (Layer Bawah: Kanvas Normal & Putih)
+    normalPass.forEach(op => {
+        if (op.type === 'empty') {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(op.x, op.y, op.dstW, op.dstH);
+        } else {
+            ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
+        }
+    });
+
+    // Eksekusi Pass 2 (Layer Atas: Tarikan Panjang/Overshoot yang menimpa kanvas normal)
+    stretchPass.forEach(op => {
+        if (op.isHoriz && stretchDirX) {
+            const extendedW = op.dstW * stretchMultiplier;
+            ctx.drawImage(offscreen, op.srcX, op.y, op.sliceW, op.h, op.x, op.y, extendedW, op.dstH);
+        } else if (!op.isHoriz && stretchDirY) {
+            const extendedH = op.dstH * stretchMultiplier;
+            ctx.drawImage(offscreen, op.x, op.srcY, op.w, op.sliceH, op.x, op.y, op.dstW, extendedH);
+        } else {
+            ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
+        }
+    });
+
+    // Dekorasi (Di atas semua layer)
     if (showGridLines) {
         ctx.fillStyle = '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
@@ -568,12 +549,7 @@ export default function App() {
             <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Grid Stretch Tool</h1>
             <p className={`text-xs mt-1 font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Advanced Slit-Scan Distortion</p>
           </div>
-          {/* Tombol Tema Terang/Gelap */}
-          <button 
-             onClick={() => setIsDarkMode(!isDarkMode)} 
-             className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
-             title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
+          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`} title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
              {isDarkMode ? '☀️' : '🌙'}
           </button>
         </div>
@@ -622,55 +598,30 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
-          {/* AI (DIPULIHKAN PENUH) */}
+          {/* AI */}
           <div className="space-y-3">
              <div className="flex items-center justify-between mb-2">
                  <h2 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Auto Annotation</h2>
-                 
-                 {/* Pilihan Bahasa yang Dipulihkan */}
                  <div className={`flex p-1 rounded-md ${isDarkMode ? 'bg-[#333]' : 'bg-gray-100'}`}>
                      {['EN', 'JP', 'ID'].map(lang => (
-                         <button 
-                           key={lang}
-                           onClick={() => setAnnoLang(lang)}
-                           className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600')}`}
-                         >
-                           {lang}
-                         </button>
+                         <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
                      ))}
                  </div>
              </div>
-             
              <div>
-                 <input 
-                     type="password" 
-                     placeholder="GitHub Token (ghp_...)" 
-                     value={apiKeyInput} 
-                     onChange={(e) => setApiKeyInput(e.target.value)} 
-                     className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} 
-                 />
-                 {/* Link Token GitHub yang Dipulihkan */}
-                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
-                     Get GitHub API Token here
-                 </a>
+                 <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
+                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>Get GitHub API Token here</a>
              </div>
-             
              <div className="flex items-center gap-3 pt-1">
                  <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#252525] border-[#444]' : 'bg-gray-50 border-gray-200'}`}>
                      <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Auto Analysis</span>
                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isDarkMode ? 'bg-[#444] text-gray-300' : 'bg-gray-800 text-white'}`}>GITHUB</span>
                  </div>
-                 <button 
-                     onClick={handleAiAnalysis} 
-                     disabled={isAiAnalyzing || !image} 
-                     className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500 cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}
-                 >
+                 <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500 cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
                      {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
                  </button>
              </div>
-             <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                 Generated texts: <span className="text-blue-500 font-bold">{aiWords.length} words</span> ({annoLang}).
-             </p>
+             <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Generated texts: <span className="text-blue-500 font-bold">{aiWords.length} words</span> ({annoLang}).</p>
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
 
@@ -686,7 +637,7 @@ export default function App() {
                 <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} disabled={isManualMode} />
             </div>
             <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Stretch Intensity</span><span className="text-blue-500 font-bold">{stretchInt}%</span></div>
+                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className="text-blue-500 font-bold">{stretchInt}%</span></div>
                 <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-blue-200'}`} />
             </div>
             <div>
@@ -715,17 +666,10 @@ export default function App() {
                      <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show Annotation Text</span>
                      <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-blue-600" />
                  </label>
-                 
-                 {/* Opsi Warna Teks yang Dikembalikan */}
                  {showTextAnnotations && (
                      <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
                          <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Text Color</span>
-                         <input 
-                            type="color" 
-                            value={textColor} 
-                            onChange={(e) => setTextColor(e.target.value)} 
-                            className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent"
-                         />
+                         <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
                      </div>
                  )}
              </div>
@@ -740,7 +684,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- PANEL KANAN (PRO WORKSPACE: Workspace dinamis adaptif thdp mode terang/gelap) --- */}
+      {/* --- PANEL KANAN (PRO WORKSPACE) --- */}
       <div 
         className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#181818]' : 'bg-[#E5E7EB]'}`}
         onPointerMove={handleWorkspacePointerMove}
@@ -748,10 +692,8 @@ export default function App() {
         onPointerLeave={handleWorkspacePointerUp}
       >
          
-         {/* Pojok Penggaris */}
          <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}></div>
 
-         {/* Penggaris Atas (Horizontal) Dinamis */}
          <div 
             className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'h')}
@@ -759,7 +701,6 @@ export default function App() {
             <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} isDarkMode={isDarkMode} />
          </div>
 
-         {/* Penggaris Kiri (Vertikal) Dinamis */}
          <div 
             className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'v')}
@@ -767,7 +708,6 @@ export default function App() {
              <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
          </div>
 
-         {/* Viewport Utama */}
          <div 
             className="absolute top-[24px] left-[24px] right-0 bottom-0 overflow-hidden"
             ref={viewportRef}
@@ -786,7 +726,6 @@ export default function App() {
                <canvas ref={canvasRef} className="shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-white object-contain" />
             </div>
 
-            {/* Lapisan Garis Bantu (Guidelines) */}
             {guides.map(g => (
                <div 
                   key={g.id}
@@ -800,7 +739,7 @@ export default function App() {
             ))}
          </div>
 
-         {/* --- FLOATING TOOLBAR KIRI (Toolbar transparan layaknya aplikasi Pro) --- */}
+         {/* --- FLOATING TOOLBAR KIRI --- */}
          <div className="absolute top-[44px] left-[44px] bg-[#2D2D2D]/95 backdrop-blur-sm border border-[#444] rounded-md shadow-2xl flex flex-col z-50 overflow-hidden">
             <button 
                 className={`p-3 transition flex items-center justify-center ${activeTool==='pan'?'bg-blue-600 text-white':'text-gray-400 hover:text-white hover:bg-[#444]'}`}
