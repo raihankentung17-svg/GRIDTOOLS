@@ -1,6 +1,6 @@
+react:Update UI Grid Tools:src/App.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- Generator Angka Acak Konsisten (Seeded RNG) ---
 function mulberry32(a) {
     return function() {
       var t = a += 0x6D2B79F5;
@@ -10,8 +10,7 @@ function mulberry32(a) {
     }
 }
 
-// --- Komponen Penggaris Dinamis (Dynamic Ruler) ---
-const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
+const Ruler = ({ type, pan, zoom, length }) => {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -25,13 +24,12 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Adaptasi Warna Penggaris berdasarkan Tema
-        ctx.fillStyle = isDarkMode ? '#222222' : '#F9FAFB'; 
+        ctx.fillStyle = '#050505'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = isDarkMode ? '#999999' : '#6B7280'; // Warna Teks
-        ctx.strokeStyle = isDarkMode ? '#555555' : '#D1D5DB'; // Warna Garis Titik (Ticks)
-        ctx.font = '9px sans-serif';
+        ctx.fillStyle = '#10B981'; 
+        ctx.strokeStyle = '#222222'; 
+        ctx.font = '9px "Space Mono", monospace';
         ctx.textBaseline = 'top';
         ctx.lineWidth = 1;
 
@@ -82,7 +80,7 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
             }
         }
         ctx.stroke();
-    }, [type, pan, zoom, length, isDarkMode]);
+    }, [type, pan, zoom, length]);
 
     return (
         <canvas 
@@ -93,16 +91,11 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
 };
 
 export default function App() {
-  // --- Manajemen Tema (Dark Mode) ---
-  const [isDarkMode, setIsDarkMode] = useState(true);
-
-  // --- Manajemen State ---
   const [image, setImage] = useState(null);
   const [rotation, setRotation] = useState(0);
   const [seed, setSeed] = useState(12345);
   
-  // State Interaktif Lanjutan (Rulers, Pan, Zoom)
-  const [activeTool, setActiveTool] = useState('pan'); // 'pan' | 'brush'
+  const [activeTool, setActiveTool] = useState('pan'); 
   const [isManualMode, setIsManualMode] = useState(false);
   const [brushSize, setBrushSize] = useState(50);
   const [viewScale, setViewScale] = useState(1);
@@ -110,11 +103,9 @@ export default function App() {
   const [isPanning, setIsPanning] = useState(false);
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
   
-  // State Guidelines (Garis Bantu)
   const [guides, setGuides] = useState([]);
   const [draggingGuide, setDraggingGuide] = useState(null); 
 
-  // Referensi DOM & Loop
   const maskPointsRef = useRef([]); 
   const isPaintingRef = useRef(false);
   const animationFrameId = useRef(null);
@@ -122,7 +113,6 @@ export default function App() {
   const fileInputRef = useRef(null);
   const viewportRef = useRef(null);
 
-  // Kontrol Slider & AI
   const [scale, setScale] = useState(80); 
   const [complexity, setComplexity] = useState(60); 
   const [density, setDensity] = useState(65);       
@@ -132,9 +122,8 @@ export default function App() {
   const [stretchDirY, setStretchDirY] = useState(true);
   const [showGridLines, setShowGridLines] = useState(true);
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
-  const [textColor, setTextColor] = useState('#000000'); 
+  const [textColor, setTextColor] = useState('#00FFFF'); 
   
-  // --- STATE AI ---
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
@@ -167,7 +156,6 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annoLang]);
 
-  // --- Fungsi Penanganan File ---
   const processFile = (file) => {
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -199,7 +187,6 @@ export default function App() {
     link.click();
   };
 
-  // --- LOGIKA AI ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
     if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your GitHub Token (API Key) first."); return; }
@@ -241,7 +228,6 @@ export default function App() {
     } finally { setIsAiAnalyzing(false); handleRandomize(); }
   };
 
-  // --- LOGIKA EVENT WORKSPACE (PAN, BRUSH & GUIDELINES) ---
   const handleWorkspacePointerDown = (e) => {
     if (!image) return;
     if (activeTool === 'pan') {
@@ -314,7 +300,6 @@ export default function App() {
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
 
-  // --- LOGIKA UTAMA RENDER CANVAS (SISTEM 2-PASS BARU) ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -325,7 +310,7 @@ export default function App() {
       canvas.width = rect.width || 800; canvas.height = rect.height || 600;
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = '24px sans-serif'; ctx.fillStyle = '#9CA3AF';
+      ctx.font = '24px "Space Mono", monospace'; ctx.fillStyle = '#9CA3AF';
       ctx.fillText('Please upload an image from the left panel', canvas.width/2, canvas.height/2);
       return;
     }
@@ -369,9 +354,6 @@ export default function App() {
     for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
     yCuts.sort((a,b) => a - b);
 
-    // LOGIKA MULTIPLIER BARU: 
-    // - stretchProb: Peluang kotak akan ditarik (Maks 100%)
-    // - stretchMultiplier: Panjang ekstensi tarikan (Aktif jika slider > 100%, naik hingga 15x lipat!)
     const stretchProb = Math.min(stretchInt, 100) / 100; 
     const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
     const pEmpty = (1 - (density / 100)) * 0.6; 
@@ -388,7 +370,6 @@ export default function App() {
         return false;
     };
 
-    // Arrays untuk Sistem Rendering 2-Pass (Mencegah tarikan tertimpa grid normal)
     const normalPass = [];
     const stretchPass = [];
 
@@ -448,7 +429,6 @@ export default function App() {
         }
     }
 
-    // Eksekusi Pass 1 (Layer Bawah: Kanvas Normal & Putih)
     normalPass.forEach(op => {
         if (op.type === 'empty') {
             ctx.fillStyle = '#FFFFFF';
@@ -458,7 +438,6 @@ export default function App() {
         }
     });
 
-    // Eksekusi Pass 2 (Layer Atas: Tarikan Panjang/Overshoot yang menimpa kanvas normal)
     stretchPass.forEach(op => {
         if (op.isHoriz && stretchDirX) {
             const extendedW = op.dstW * stretchMultiplier;
@@ -471,7 +450,6 @@ export default function App() {
         }
     });
 
-    // Dekorasi (Di atas semua layer)
     if (showGridLines) {
         ctx.fillStyle = '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
@@ -523,152 +501,148 @@ export default function App() {
                 const num = Math.floor(rng() * 50) + 1;
                 
                 ctx.fillStyle = textColor;
-                ctx.font = `900 ${mainFont}px monospace`;
+                ctx.font = `900 ${mainFont}px "Space Mono", monospace`;
                 ctx.fillText(word, x, y - spacing1);
-                ctx.font = `${subFont}px monospace`;
+                ctx.font = `${subFont}px "Space Mono", monospace`;
                 ctx.fillText(`${num}+`, x, y + spacing2);
                 ctx.fillRect(x, y + spacing3, barWidth, barHeight);
                 count++;
             }
         }
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize]);
+  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
   return (
-    <div className="flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden">
+    <div className="flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden bg-[#050505] text-[#e5e5e5]">
       
-      {/* --- PANEL KIRI (Kontrol UI dengan Dukungan Tema Terang/Gelap) --- */}
-      <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
-                      ${isDarkMode ? 'bg-[#1E1E1E] border-[#333]' : 'bg-white border-gray-200'}`}>
+      {/* --- PANEL KIRI --- */}
+      <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 bg-[#0a0a0a] border-[#222]`}>
         
         {/* Header Panel */}
-        <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 ${isDarkMode ? 'bg-[#252525] border-[#333]' : 'bg-gray-50 border-gray-100'}`}>
+        <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 bg-[#111] border-[#222]`}>
           <div>
-            <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>Grid Stretch Tool</h1>
-            <p className={`text-xs mt-1 font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Advanced Slit-Scan Distortion</p>
+            <h1 className={`text-xl font-bold tracking-tight text-[#10B981]`} style={{fontFamily: "'Space Mono', monospace"}}>Grid Tools Studio</h1>
+            <p className={`text-xs mt-1 font-medium text-[#888]`}>Advanced Slit-Scan Distortion</p>
           </div>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`} title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-             {isDarkMode ? '☀️' : '🌙'}
-          </button>
         </div>
 
         <div className="p-6 flex-1 flex flex-col space-y-7">
           {/* Operasi Gambar */}
           <div className="space-y-4">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Image Operations</h2>
-            <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-semibold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-gray-100 text-black hover:bg-white' : 'bg-black text-white hover:bg-gray-800'}`}>
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 text-[#555]`} style={{fontFamily: "'Space Mono', monospace"}}>Image Operations</h2>
+            <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.3)]`}>
               Upload Image
             </button>
             <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
             <div className="flex space-x-3">
-              <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#333] text-gray-200 hover:bg-[#444]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
-              <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#333] text-gray-200 hover:bg-[#444]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
+              <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]`}>↻ Rotate</button>
+              <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]`}>🔀 Randomize</button>
             </div>
             <div className="pt-2">
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <div className={`flex justify-between text-xs font-semibold mb-2 text-[#ccc]`}>
                     <span>Image Scale (Bleed)</span>
-                    <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#333] text-gray-300' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
+                    <span className={`px-2 py-0.5 rounded font-mono bg-[#222] text-[#00FFFF]`}>{scale}%</span>
                 </div>
-                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} />
+                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] bg-[#222]`} />
             </div>
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
+          <hr className={`border-t border-[#222]`} />
 
           {/* Mode Seleksi */}
           <div className="space-y-4">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Effect Spread Mode</h2>
-            <div className={`flex p-1 rounded-lg ${isDarkMode ? 'bg-[#333]' : 'bg-gray-100'}`}>
-                <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
-                <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 text-[#555]`} style={{fontFamily: "'Space Mono', monospace"}}>Effect Spread Mode</h2>
+            <div className={`flex p-1 rounded-lg bg-[#111] border border-[#222]`}>
+                <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'text-[#888] hover:text-[#ccc]'}`}>Auto (Random)</button>
+                <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'text-[#888] hover:text-[#ccc]'}`}>Manual (Brush)</button>
             </div>
             {isManualMode && (
-                <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-blue-900/20 border-blue-500/30' : 'bg-blue-50 border-blue-100'}`}>
-                    <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-blue-300' : 'text-blue-700'}`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
+                <div className={`p-4 border rounded-lg space-y-4 bg-[#0a0a0a] border-[#00FFFF]/30`}>
+                    <p className={`text-[11px] font-medium leading-relaxed text-[#00FFFF]`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
                     <div>
-                        <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            <span>Brush Size</span><span>{brushSize}</span>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-2 text-[#ccc]`}>
+                            <span>Brush Size</span><span className="text-[#00FFFF] font-mono">{brushSize}</span>
                         </div>
-                        <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-blue-200'}`} />
+                        <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FFFF] bg-[#222]`} />
                     </div>
-                    <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition ${isDarkMode ? 'bg-[#333] border border-[#444] text-gray-300 hover:bg-[#444]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
+                    <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition bg-[#222] border border-[#333] text-[#ccc] hover:bg-[#333]`}>🗑️ Clear Selection</button>
                 </div>
             )}
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
+          <hr className={`border-t border-[#222]`} />
 
           {/* AI */}
           <div className="space-y-3">
              <div className="flex items-center justify-between mb-2">
-                 <h2 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Auto Annotation</h2>
-                 <div className={`flex p-1 rounded-md ${isDarkMode ? 'bg-[#333]' : 'bg-gray-100'}`}>
+                 <h2 className={`text-xs font-bold uppercase tracking-wider text-[#555]`} style={{fontFamily: "'Space Mono', monospace"}}>Auto Annotation</h2>
+                 <div className={`flex p-1 rounded-md bg-[#111] border border-[#222]`}>
                      {['EN', 'JP', 'ID'].map(lang => (
-                         <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
+                         <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#333]' : 'text-[#888] hover:text-[#ccc]'}`}>{lang}</button>
                      ))}
                  </div>
              </div>
              <div>
-                 <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:border-blue-500 focus:outline-none ${isDarkMode ? 'bg-[#252525] border-[#444] text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
-                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>Get GitHub API Token here</a>
+                 <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:border-[#10B981] focus:outline-none bg-[#111] border-[#333] text-white`} />
+                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline text-[#00FFFF]`}>Get GitHub API Token here</a>
              </div>
              <div className="flex items-center gap-3 pt-1">
-                 <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#252525] border-[#444]' : 'bg-gray-50 border-gray-200'}`}>
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Auto Analysis</span>
-                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isDarkMode ? 'bg-[#444] text-gray-300' : 'bg-gray-800 text-white'}`}>GITHUB</span>
+                 <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm bg-[#111] border-[#333]`}>
+                     <span className={`text-sm font-semibold text-[#ccc]`}>Auto Analysis</span>
+                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full bg-[#222] text-[#10B981] border border-[#10B981]/50`}>GITHUB</span>
                  </div>
-                 <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#444] text-gray-500 cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
+                 <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]'}`}>
                      {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
                  </button>
              </div>
-             <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Generated texts: <span className="text-blue-500 font-bold">{aiWords.length} words</span> ({annoLang}).</p>
+             <p className={`text-[11px] font-medium mt-1 text-[#888]`}>Generated texts: <span className="text-[#00FFFF] font-bold">{aiWords.length} words</span> ({annoLang}).</p>
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
+          <hr className={`border-t border-[#222]`} />
 
           {/* Parameter Slitscan */}
           <div className="space-y-5">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Slit-Scan Options</h2>
+            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 text-[#555]`} style={{fontFamily: "'Space Mono', monospace"}}>Slit-Scan Options</h2>
             <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Cut Complexity</span></div>
-                <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} />
+                <div className={`flex justify-between text-xs font-semibold mb-2 text-[#ccc]`}><span>Cut Complexity</span><span className="text-[#10B981] font-mono">{complexity}%</span></div>
+                <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] bg-[#222]`} />
             </div>
             <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span></div>
-                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-gray-200'}`} disabled={isManualMode} />
+                <div className={`flex justify-between text-xs font-semibold mb-2 text-[#ccc]`}><span>Density (Empty Gaps)</span><span className="text-[#10B981] font-mono">{density}%</span></div>
+                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] bg-[#222]`} disabled={isManualMode} />
             </div>
             <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className="text-blue-500 font-bold">{stretchInt}%</span></div>
-                <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-blue-500 ${isDarkMode ? 'bg-[#444]' : 'bg-blue-200'}`} />
+                <div className={`flex justify-between text-xs font-semibold mb-2 text-[#ccc]`}><span>Stretch Intensity (Overshoot)</span><span className="text-[#00FFFF] font-mono">{stretchInt}%</span></div>
+                <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] bg-[#222]`} />
             </div>
             <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className="text-red-500 font-bold">{brutalInt}%</span></div>
-                <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#444]' : 'bg-red-200'}`} />
+                <div className={`flex justify-between text-xs font-semibold mb-2 text-[#ccc]`}><span>Brutal Distortion</span><span className="text-red-500 font-mono">{brutalInt}%</span></div>
+                <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 bg-[#222]`} />
             </div>
             <div className="flex items-center justify-between pt-2">
-                <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Stretch Direction</span>
-                <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#333] border-[#444]' : 'bg-gray-100 border-gray-200'}`}>
-                    <button className={`px-3 py-1.5 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
-                    <button className={`px-3 py-1.5 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#555] text-white shadow-sm' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-gray-400' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
+                <span className={`text-xs font-semibold text-[#ccc]`}>Stretch Direction</span>
+                <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border bg-[#111] border-[#333]`}>
+                    <button className={`px-3 py-1.5 rounded ${stretchDirX ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'text-[#888]'}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
+                    <button className={`px-3 py-1.5 rounded ${stretchDirY ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'text-[#888]'}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
                 </div>
             </div>
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`} />
+          <hr className={`border-t border-[#222]`} />
 
           {/* Tampilan */}
           <div className="space-y-4">
-             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`}>Visuals & Annotations</h2>
+             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 text-[#555]`} style={{fontFamily: "'Space Mono', monospace"}}>Visuals & Annotations</h2>
              <label className="flex items-center justify-between cursor-pointer">
-                 <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
-                 <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4.5 h-4.5 accent-blue-600" />
+                 <span className={`text-sm font-semibold text-[#ccc]`}>Show Grid Lines & Blocks</span>
+                 <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4.5 h-4.5 accent-[#10B981]" />
              </label>
              <div className="space-y-3">
                  <label className="flex items-center justify-between cursor-pointer">
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Show Annotation Text</span>
-                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-blue-600" />
+                     <span className={`text-sm font-semibold text-[#ccc]`}>Show Annotation Text</span>
+                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4.5 h-4.5 accent-[#00FFFF]" />
                  </label>
                  {showTextAnnotations && (
-                     <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-gray-600' : 'border-gray-200'}`}>
-                         <span className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Text Color</span>
+                     <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 border-[#333]`}>
+                         <span className={`text-xs font-medium text-[#888]`}>Text Color</span>
                          <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
                      </div>
                  )}
@@ -676,36 +650,36 @@ export default function App() {
           </div>
         </div>
 
-        <div className={`p-6 border-t transition-colors duration-200 ${isDarkMode ? 'bg-[#252525] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+        <div className={`p-6 border-t transition-colors duration-200 bg-[#111] border-[#222]`}>
            <div className="flex space-x-3">
-              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-semibold text-sm transition active:scale-95 ${isDarkMode ? 'bg-gray-100 text-black hover:bg-white' : 'bg-black text-white hover:bg-gray-800'}`}>Export PNG</button>
-              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-semibold text-sm transition active:scale-95 ${isDarkMode ? 'border-[#444] bg-[#222] text-gray-300 hover:bg-[#333]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>Export JPG</button>
+              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-bold text-sm transition active:scale-95 bg-[#00FFFF] text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.3)]`}>Export PNG</button>
+              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-bold text-sm transition active:scale-95 border-[#333] bg-[#222] text-[#ccc] hover:bg-[#333]`}>Export JPG</button>
            </div>
         </div>
       </div>
 
       {/* --- PANEL KANAN (PRO WORKSPACE) --- */}
       <div 
-        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#181818]' : 'bg-[#E5E7EB]'}`}
+        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 bg-[#050505]`}
         onPointerMove={handleWorkspacePointerMove}
         onPointerUp={handleWorkspacePointerUp}
         onPointerLeave={handleWorkspacePointerUp}
       >
          
-         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}></div>
+         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors bg-[#0a0a0a] border-[#222]`}></div>
 
          <div 
-            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
+            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors bg-[#0a0a0a] border-[#222]`}
             onPointerDown={(e) => startGuideFromRuler(e, 'h')}
          >
-            <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} isDarkMode={isDarkMode} />
+            <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} />
          </div>
 
          <div 
-            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#222] border-[#333]' : 'bg-gray-100 border-gray-300'}`}
+            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors bg-[#0a0a0a] border-[#222]`}
             onPointerDown={(e) => startGuideFromRuler(e, 'v')}
          >
-             <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
+             <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} />
          </div>
 
          <div 
@@ -723,7 +697,7 @@ export default function App() {
                className={`w-full h-full flex items-center justify-center transition-transform duration-75
                            ${activeTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
             >
-               <canvas ref={canvasRef} className="shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-white object-contain" />
+               <canvas ref={canvasRef} className="shadow-[0_0_50px_rgba(0,0,0,0.8)] bg-[#050505] object-contain" />
             </div>
 
             {guides.map(g => (
@@ -740,22 +714,22 @@ export default function App() {
          </div>
 
          {/* --- FLOATING TOOLBAR KIRI --- */}
-         <div className="absolute top-[44px] left-[44px] bg-[#2D2D2D]/95 backdrop-blur-sm border border-[#444] rounded-md shadow-2xl flex flex-col z-50 overflow-hidden">
+         <div className="absolute top-[44px] left-[44px] bg-[#0a0a0a]/90 backdrop-blur-md border border-[#222] rounded-md shadow-2xl flex flex-col z-50 overflow-hidden">
             <button 
-                className={`p-3 transition flex items-center justify-center ${activeTool==='pan'?'bg-blue-600 text-white':'text-gray-400 hover:text-white hover:bg-[#444]'}`}
+                className={`p-3 transition flex items-center justify-center ${activeTool==='pan'?'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]':'text-[#888] hover:text-white hover:bg-[#222]'}`}
                 onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
             </button>
             <button 
-                className={`p-3 transition flex items-center justify-center ${activeTool==='brush'?'bg-blue-600 text-white':'text-gray-400 hover:text-white hover:bg-[#444]'}`}
+                className={`p-3 transition flex items-center justify-center ${activeTool==='brush'?'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]':'text-[#888] hover:text-white hover:bg-[#222]'}`}
                 onClick={() => { setActiveTool('brush'); setIsManualMode(true); }} title="Brush Tool (Paint Effect Area)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
             </button>
-            <div className="h-[1px] bg-[#444] w-full"></div>
+            <div className="h-[1px] bg-[#222] w-full"></div>
             <button 
-                className="p-3 transition flex items-center justify-center text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                className="p-3 transition flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:text-red-400"
                 onClick={() => setGuides([])} title="Clear All Guides"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -763,11 +737,11 @@ export default function App() {
          </div>
 
          {/* --- FLOATING ZOOM PANEL KANAN BAWAH --- */}
-         <div className="absolute bottom-6 right-6 bg-[#2D2D2D]/95 backdrop-blur-sm text-gray-300 text-xs rounded shadow-2xl flex items-center border border-[#444] overflow-hidden z-50">
-            <button className="px-4 py-3 hover:bg-[#444] transition font-bold" onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
-            <span className="px-3 font-mono border-x border-[#444] min-w-[65px] text-center">{Math.round(viewScale * 100)}%</span>
-            <button className="px-4 py-3 hover:bg-[#444] transition font-bold" onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
-            <button className="px-4 py-3 hover:bg-[#444] transition text-blue-400 font-semibold" onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Reset</button>
+         <div className="absolute bottom-6 right-6 bg-[#0a0a0a]/90 backdrop-blur-md text-[#ccc] text-xs rounded shadow-2xl flex items-center border border-[#222] overflow-hidden z-50">
+            <button className="px-4 py-3 hover:bg-[#222] transition font-bold" onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
+            <span className="px-3 font-mono border-x border-[#222] min-w-[65px] text-center text-[#00FFFF]">{Math.round(viewScale * 100)}%</span>
+            <button className="px-4 py-3 hover:bg-[#222] transition font-bold" onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
+            <button className="px-4 py-3 hover:bg-[#222] transition text-[#10B981] font-semibold" onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Reset</button>
          </div>
 
       </div>
