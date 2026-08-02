@@ -189,6 +189,7 @@ export default function App() {
     link.click();
   };
 
+  // --- LOGIKA AI (GEMINI 3.1 FLASH LITE) ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
     if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your Gemini Token (API Key) first."); return; }
@@ -212,7 +213,7 @@ export default function App() {
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        // Menggunakan model Gemini 3.1 Flash Lite sesuai dengan kebijakan Google AI Studio 2026
+        // Memanggil API Resmi Google Gemini dengan model 3.1-flash-lite
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 
@@ -226,7 +227,7 @@ export default function App() {
                             {
                                 inline_data: {
                                     mime_type: "image/jpeg",
-                                    data: base64DataRaw
+                                    data: base64DataRaw // Data base64 mentah
                                 }
                             }
                         ]
