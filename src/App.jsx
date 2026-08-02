@@ -189,15 +189,14 @@ export default function App() {
     link.click();
   };
 
-  // --- LOGIKA AI YANG SUDAH DI-OPTIMASI UNTUK MENCEGAH SERVER ERROR ---
+  // --- LOGIKA AI YANG SUDAH DIGANTI KE GEMINI 1.5 FLASH (TANPA MENGUBAH UI) ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
-    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your GitHub Token (API Key) first."); return; }
+    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your Gemini API Key first."); return; }
     setIsAiAnalyzing(true);
     
     try {
         const tempCanvas = document.createElement('canvas');
-        // 1. Pengecilan drastis agar server Azure tidak Timeout
         const MAX_SIZE = 500; 
         let w = image.width; let h = image.height;
         if (w > MAX_SIZE || h > MAX_SIZE) { 
@@ -208,48 +207,66 @@ export default function App() {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
-        // 2. Kompresi kualitas jpeg menjadi 50% untuk efisiensi beban
-        const base64Data = tempCanvas.toDataURL('image/jpeg', 0.5); 
+        // Gemini membutuhkan raw base64 tanpa prefix "data:image/jpeg;base64,"
+        const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        const response = await fetch("https://models.inference.ai.azure.com/chat/completions", {
+        // Memanggil API Gemini versi terbaru (v1beta) dengan model 2.5-flash
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${apiKey}` 
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
-                model: "gpt-4o", // 3. Upgrade ke model flagship (lebih stabil dari gpt-4o-mini di API ini)
-                messages: [ 
-                    { 
-                        role: "user", 
-                        content: [ 
-                            { type: "text", text: promptText }, 
-                            { type: "image_url", image_url: { url: base64Data, detail: "low" } } // Parameter low detail
-                        ] 
-                    } 
+                contents: [
+                    {
+                        parts: [
+                            { text: promptText },
+                            {
+                                inline_data: {
+                                    mime_type: "image/jpeg",
+                                    data: base64DataRaw
+                                }
+                            }
+                        ]
+                    }
                 ],
-                max_tokens: 150, // 4. Mencegah server error karena kelebihan ekspektasi output
-                temperature: 0.7
+                generationConfig: {
+                    maxOutputTokens: 150,
+                    temperature: 0.7
+                }
             })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || data.error?.message || `API Error: ${response.status}`);
         
-        let text = data.choices?.[0]?.message?.content;
+        // Menangkap Eror Spesifik dari Google
+        if (!response.ok) {
+            throw new Error(data.error?.message || `API Error: ${response.status}`);
+        }
+        
+        // Parsing Format Jawaban Gemini
+        let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
             text = text.replace(/`/g, '').replace(/csv/g, '').trim();
             const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
-            if (words.length > 0) { setAiWords(words); alert("AI Analysis Successful!"); }
-        } else throw new Error("Empty response from AI.");
+            if (words.length > 0) { 
+                setAiWords(words); 
+                alert("Gemini AI Analysis Successful!"); 
+            }
+        } else {
+            throw new Error("Empty response from AI.");
+        }
     } catch (err) {
         console.error("AI API Error:", err);
-        alert(`Failed to analyze image via GitHub Models.\n\nError: ${err.message}`);
+        alert(`Failed to analyze image via Gemini API.\n\nError: ${err.message}`);
         setAiWords(fallbackWords[annoLang]);
-    } finally { setIsAiAnalyzing(false); handleRandomize(); }
+    } finally { 
+        setIsAiAnalyzing(false); 
+        handleRandomize(); 
+    }
   };
 
   const handleWorkspacePointerDown = (e) => {
@@ -550,7 +567,6 @@ export default function App() {
       <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
                       ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-white border-gray-200'}`}>
         
-        {/* Header Panel */}
         <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-50 border-gray-100'}`}>
           <div>
             <h1 className={`text-xl font-bold tracking-tight font-mono ${isDarkMode ? 'text-[#10B981]' : 'text-gray-900'}`}>GRID STUDIO</h1>
@@ -562,7 +578,6 @@ export default function App() {
         </div>
 
         <div className="p-6 flex-1 flex flex-col space-y-7">
-          {/* Operasi Gambar */}
           <div className="space-y-4">
             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
             <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black text-white hover:bg-gray-800'}`}>
@@ -583,7 +598,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* Mode Seleksi */}
           <div className="space-y-4">
             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
             <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
@@ -605,7 +619,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* AI */}
           <div className="space-y-3">
              <div className="flex items-center justify-between mb-2">
                  <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
@@ -616,13 +629,13 @@ export default function App() {
                  </div>
              </div>
              <div>
-                 <input type="password" placeholder="GitHub Token (ghp_...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
-                 <a href="https://github.com/marketplace/models" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get GitHub API Token here</a>
+                 <input type="password" placeholder="Gemini API Key (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
+                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Free Gemini API Key here</a>
              </div>
              <div className="flex items-center gap-3 pt-1">
                  <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
                      <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Auto Analysis</span>
-                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GITHUB</span>
+                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GEMINI</span>
                  </div>
                  <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
                      {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
@@ -632,7 +645,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* Parameter Slitscan */}
           <div className="space-y-5">
             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
             <div>
@@ -661,7 +673,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* Tampilan */}
           <div className="space-y-4">
              <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
              <label className="flex items-center justify-between cursor-pointer">
@@ -691,7 +702,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- PANEL KANAN (PRO WORKSPACE) --- */}
+      {/* --- PANEL KANAN --- */}
       <div 
         className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#050505]' : 'bg-[#E5E7EB]'}`}
         onPointerMove={handleWorkspacePointerMove}
@@ -746,7 +757,6 @@ export default function App() {
             ))}
          </div>
 
-         {/* --- FLOATING TOOLBAR KIRI --- */}
          <div className={`absolute top-[44px] left-[44px] backdrop-blur-md border rounded-md shadow-2xl flex flex-col z-50 overflow-hidden ${isDarkMode ? 'bg-[#0a0a0a]/90 border-[#222]' : 'bg-[#2D2D2D]/95 border-[#444]'}`}>
             <button 
                 className={`p-3 transition flex items-center justify-center ${activeTool==='pan' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
@@ -769,7 +779,6 @@ export default function App() {
             </button>
          </div>
 
-         {/* --- FLOATING ZOOM PANEL KANAN BAWAH --- */}
          <div className={`absolute bottom-6 right-6 backdrop-blur-md text-xs rounded shadow-2xl flex items-center border overflow-hidden z-50 ${isDarkMode ? 'bg-[#0a0a0a]/90 text-[#ccc] border-[#222]' : 'bg-[#2D2D2D]/95 text-gray-300 border-[#444]'}`}>
             <button className={`px-4 py-3 transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-[#444]'}`} onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
             <span className={`px-3 font-mono border-x min-w-[65px] text-center ${isDarkMode ? 'border-[#222] text-[#00FFFF]' : 'border-[#444]'}`}>{Math.round(viewScale * 100)}%</span>
