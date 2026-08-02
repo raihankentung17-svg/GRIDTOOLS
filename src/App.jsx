@@ -189,10 +189,9 @@ export default function App() {
     link.click();
   };
 
-  // --- LOGIKA AI YANG SUDAH DIGANTI KE GEMINI 1.5 FLASH (TANPA MENGUBAH UI) ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
-    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your Gemini API Key first."); return; }
+    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your Gemini Token (API Key) first."); return; }
     setIsAiAnalyzing(true);
     
     try {
@@ -207,14 +206,14 @@ export default function App() {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
-        // Gemini membutuhkan raw base64 tanpa prefix "data:image/jpeg;base64,"
+        // Gemini API membutuhkan raw base64 tanpa prefix "data:image/jpeg;base64,"
         const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        // Memanggil API Gemini versi terbaru (v1beta) dengan model 2.5-flash
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        // Menggunakan model Gemini 3.1 Flash Lite sesuai dengan kebijakan Google AI Studio 2026
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json'
@@ -242,12 +241,10 @@ export default function App() {
 
         const data = await response.json();
         
-        // Menangkap Eror Spesifik dari Google
         if (!response.ok) {
             throw new Error(data.error?.message || `API Error: ${response.status}`);
         }
         
-        // Parsing Format Jawaban Gemini
         let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
             text = text.replace(/`/g, '').replace(/csv/g, '').trim();
@@ -629,8 +626,8 @@ export default function App() {
                  </div>
              </div>
              <div>
-                 <input type="password" placeholder="Gemini API Key (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
-                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Free Gemini API Key here</a>
+                 <input type="password" placeholder="Gemini Token (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
+                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Gemini API Token here</a>
              </div>
              <div className="flex items-center gap-3 pt-1">
                  <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
