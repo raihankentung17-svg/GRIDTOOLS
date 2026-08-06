@@ -127,6 +127,7 @@ export default function App() {
   const [textColor, setTextColor] = useState('#00FFFF'); 
   
   const [renderStyle, setRenderStyle] = useState('classic'); 
+  const [canvasFormat, setCanvasFormat] = useState('original');
 
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
@@ -408,8 +409,21 @@ export default function App() {
     const rng = mulberry32(seed);
     const isRotated = rotation % 180 !== 0;
     
-    canvas.width = isRotated ? image.height : image.width;
-    canvas.height = isRotated ? image.width : image.height;
+    // --- KODE LOGIKA FORMAT KANVAS ---
+    const formats = {
+        'original': { w: image.width, h: image.height },
+        'square': { w: 1080, h: 1080 },
+        'portrait': { w: 1080, h: 1350 },
+        'landscape': { w: 1920, h: 1080 },
+        'story': { w: 1080, h: 1920 },
+        'a4': { w: 1240, h: 1754 }
+    };
+
+    let baseW = formats[canvasFormat].w;
+    let baseH = formats[canvasFormat].h;
+
+    canvas.width = isRotated ? baseH : baseW;
+    canvas.height = isRotated ? baseW : baseH;
     const relScale = Math.max(1, canvas.width / 1000); 
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
@@ -664,7 +678,7 @@ export default function App() {
             }
         }
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle]);
+  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat]); // Tambahkan canvasFormat ke dalam dependencies
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
@@ -702,6 +716,26 @@ export default function App() {
                   <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
                   <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
                 </div>
+                
+                {/* CANVAS FORMAT UI */}
+                <div className="mb-4 mt-4">
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                        <span>Canvas Format</span>
+                    </div>
+                    <select 
+                        value={canvasFormat} 
+                        onChange={(e) => setCanvasFormat(e.target.value)}
+                        className={`w-full text-xs p-2.5 border rounded-md focus:outline-none appearance-none cursor-pointer ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500'}`}
+                    >
+                        <option value="original">Original Image</option>
+                        <option value="square">Square (1080 x 1080) - Feed</option>
+                        <option value="portrait">Portrait (1080 x 1350) - IG</option>
+                        <option value="landscape">Landscape (1920 x 1080) - Video/Web</option>
+                        <option value="story">Story / Reels (1080 x 1920)</option>
+                        <option value="a4">A4 Zine Poster (1240 x 1754)</option>
+                    </select>
+                </div>
+
                 <div className="pt-2">
                     <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
                         <span>Image Scale (Bleed)</span>
