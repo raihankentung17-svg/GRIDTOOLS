@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- Generator Angka Acak Konsisten (Seeded RNG) ---
-function mulberry32(a) {
+//function mulberry32(a) {
     return function() {
       var t = a += 0x6D2B79F5;
       t = Math.imul(t ^ t >>> 15, t | 1);
@@ -10,8 +9,7 @@ function mulberry32(a) {
     }
 }
 
-// --- Komponen Penggaris Dinamis (Dynamic Ruler) ---
-const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
+//const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
     const canvasRef = useRef(null);
 
     useEffect(() => {
@@ -91,7 +89,7 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
     );
 };
 
-export default function App() {
+//export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [image, setImage] = useState(null);
   const [rotation, setRotation] = useState(0);
@@ -126,21 +124,23 @@ export default function App() {
   const [showTextAnnotations, setShowTextAnnotations] = useState(true);
   const [textColor, setTextColor] = useState('#00FFFF'); 
   
+  // --- STATE BARU: RENDER STYLE ---
+  const [renderStyle, setRenderStyle] = useState('classic'); 
+
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
 
-  // --- FEATURE 1: ACCORDION LAYOUT STATE ---
   const [accordions, setAccordions] = useState({
       ops: true,
       mode: true,
+      style: true, // Accordion baru untuk Render Styles
       ai: true,
       slit: true,
       visuals: true
   });
   const toggleAccordion = (key) => setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // --- FEATURE 2 & 4: MOUSE POS & SPACEBAR EVENT STATE ---
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHoveringWorkspace, setIsHoveringWorkspace] = useState(false);
@@ -152,7 +152,7 @@ export default function App() {
   };
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
 
-  useEffect(() => {
+  //  useEffect(() => {
     const updateSize = () => {
         if (viewportRef.current) {
             setViewportSize({ w: viewportRef.current.clientWidth, h: viewportRef.current.clientHeight });
@@ -173,21 +173,18 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annoLang]);
 
-  // --- FEATURE 3: LOAD API KEY FROM LOCAL STORAGE ---
   useEffect(() => {
       const savedKey = localStorage.getItem('geminiApiKey');
       if (savedKey) setApiKeyInput(savedKey);
   }, []);
 
-  // --- FEATURE 4: WINDOW SPACEBAR EVENT LISTENER ---
   useEffect(() => {
       const handleKeyDown = (e) => {
           if (e.code === 'Space') {
-              // Ignore if user is typing in an input
               if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
               e.preventDefault();
               setIsSpacePressed(true);
-              if (isPaintingRef.current) isPaintingRef.current = false; // Prevent stuck painting
+              if (isPaintingRef.current) isPaintingRef.current = false; 
           }
       };
       const handleKeyUp = (e) => {
@@ -207,7 +204,7 @@ export default function App() {
       };
   }, []);
 
-  const processFile = (file) => {
+  //  const processFile = (file) => {
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -298,7 +295,6 @@ export default function App() {
             const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
             if (words.length > 0) { 
                 setAiWords(words); 
-                // --- FEATURE 3: SAVE API KEY TO LOCAL STORAGE ---
                 localStorage.setItem('geminiApiKey', apiKey);
                 alert("Gemini AI Analysis Successful!"); 
             }
@@ -315,10 +311,9 @@ export default function App() {
     }
   };
 
-  // --- FEATURE 4: DYNAMIC TOOL SELECTION OVERRIDE ---
   const currentTool = isSpacePressed ? 'pan' : activeTool;
 
-  const handleWorkspacePointerDown = (e) => {
+  //  const handleWorkspacePointerDown = (e) => {
     if (!image) return;
     if (currentTool === 'pan') {
       setIsPanning(true);
@@ -331,7 +326,6 @@ export default function App() {
   };
 
   const handleWorkspacePointerMove = (e) => {
-    // --- FEATURE 2: MOUSE POS UPDATE ---
     setMousePos({ x: e.clientX, y: e.clientY });
 
     if (draggingGuide) {
@@ -393,8 +387,7 @@ export default function App() {
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
 
-  // --- JANGAN DIUBAH: FULL LOGIKA MATH & RENDER ---
-  const drawCanvas = useCallback(() => {
+  //  const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -440,6 +433,7 @@ export default function App() {
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
+    // -- INTI ALGORITMA GRID & SLIT SCAN (JANGAN DISENTUH) --
     const numCols = Math.floor(10 + (complexity / 100) * 80);
     const numRows = Math.floor(10 + (complexity / 100) * 80);
     
@@ -451,7 +445,6 @@ export default function App() {
     for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
     yCuts.sort((a,b) => a - b);
 
-    // SISTEM MULTIPLIER REGANGAN
     const stretchProb = Math.min(stretchInt, 100) / 100; 
     const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
     const pEmpty = (1 - (density / 100)) * 0.6; 
@@ -468,7 +461,6 @@ export default function App() {
         return false;
     };
 
-    // SISTEM RENDERING 2 LAPIS
     const normalPass = [];
     const stretchPass = [];
 
@@ -528,6 +520,36 @@ export default function App() {
         }
     }
 
+    //    
+    // --- 1. SETUP: TYPOGRAPHIC STYLE MASKING ---
+    if (renderStyle === 'typographic') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = isDarkMode ? '#FFFFFF' : '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Pilih kata stabil menggunakan sisa pembagian dari seed
+        const stableIndex = Math.floor((seed % 100) / 100 * aiWords.length) || 0;
+        const word = aiWords[stableIndex] || 'STRETCH';
+        
+        let fontSize = canvas.width / Math.max(word.length * 0.4, 1);
+        if (fontSize < 100) fontSize = 100;
+        ctx.font = `900 ${fontSize}px sans-serif`;
+
+        // Gambar teks berulang memenuhi layar vertikal
+        for(let yPos = fontSize/2; yPos <= canvas.height + fontSize; yPos += fontSize * 0.85) {
+            ctx.fillText(word, canvas.width/2, yPos);
+        }
+        // Mengunci seluruh render selanjutnya hanya di dalam batas piksel teks ini
+        ctx.globalCompositeOperation = 'source-in';
+    }
+
+    // --- 2. SETUP: ZINE STYLE FILTER ---
+    if (renderStyle === 'zine') {
+        ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
+    }
+
+    // EKSEKUSI LAYER 1: NORMAL PASS
     normalPass.forEach(op => {
         if (op.type === 'empty') {
             ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF';
@@ -537,19 +559,95 @@ export default function App() {
         }
     });
 
+    // EKSEKUSI LAYER 2: STRETCH PASS (DENGAN MANIPULASI GAYA)
     stretchPass.forEach(op => {
+        let srcX = op.x; let srcY = op.y;
+        let srcW = op.w; let srcH = op.h;
+        let dstX = op.x; let dstY = op.y;
+        let dstW = op.dstW; let dstH = op.dstH;
+
         if (op.isHoriz && stretchDirX) {
-            const extendedW = op.dstW * stretchMultiplier;
-            ctx.drawImage(offscreen, op.srcX, op.y, op.sliceW, op.h, op.x, op.y, extendedW, op.dstH);
+            srcX = op.srcX; srcW = op.sliceW;
+            dstW = op.dstW * stretchMultiplier;
         } else if (!op.isHoriz && stretchDirY) {
-            const extendedH = op.dstH * stretchMultiplier;
-            ctx.drawImage(offscreen, op.x, op.srcY, op.w, op.sliceH, op.x, op.y, op.dstW, extendedH);
+            srcY = op.srcY; srcH = op.sliceH;
+            dstH = op.dstH * stretchMultiplier;
+        }
+
+        // --- MANIPULASI: LIQUID STYLE ---
+        if (renderStyle === 'liquid') {
+            if (op.isHoriz && stretchDirX) {
+                // Bergelombang di sumbu Y
+                dstY += Math.sin(op.x * 0.05 + seed) * 15 * relScale;
+            } else if (!op.isHoriz && stretchDirY) {
+                // Bergelombang di sumbu X
+                dstX += Math.cos(op.y * 0.05 + seed) * 15 * relScale;
+            }
+        }
+
+        const drawOp = (xOff = 0, yOff = 0) => {
+            ctx.drawImage(offscreen, srcX, srcY, srcW, srcH, dstX + xOff, dstY + yOff, dstW, dstH);
+        };
+
+        // --- MANIPULASI: GLITCH STYLE (CHROMATIC ABERRATION) ---
+        if (renderStyle === 'glitch') {
+            ctx.save();
+            ctx.globalCompositeOperation = 'screen';
+            ctx.globalAlpha = 0.6;
+            
+            // Channel Cyan (Kiri)
+            ctx.filter = 'sepia(100%) hue-rotate(180deg) saturate(400%)';
+            drawOp(-4 * relScale, 0);
+            
+            // Channel Red/Magenta (Kanan)
+            ctx.filter = 'sepia(100%) hue-rotate(300deg) saturate(400%)';
+            drawOp(4 * relScale, 0);
+            
+            // Base layer asli (Tengah)
+            ctx.filter = 'none';
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1.0;
+            drawOp(0, 0);
+            
+            ctx.restore();
         } else {
-            ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
+            drawOp(0, 0);
         }
     });
 
-    if (showGridLines) {
+    // Reset filter zine/glitch
+    ctx.filter = 'none';
+
+    // --- 3. CLOSING: ZINE STYLE OVERLAY (NOISE) ---
+    if (renderStyle === 'zine') {
+        const noiseCnv = document.createElement('canvas');
+        noiseCnv.width = 100; noiseCnv.height = 100;
+        const nCtx = noiseCnv.getContext('2d');
+        const imgData = nCtx.createImageData(100, 100);
+        const data32 = new Uint32Array(imgData.data.buffer);
+        for(let k=0; k<data32.length; k++) {
+            const v = (rng() * 255) | 0; // Deterministic static per frame
+            data32[k] = 0xFF000000 | v<<16 | v<<8 | v;
+        }
+        nCtx.putImageData(imgData, 0, 0);
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = ctx.createPattern(noiseCnv, 'repeat');
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
+
+    // --- 4. CLOSING: TYPOGRAPHIC STYLE BACKGROUND ---
+    if (renderStyle === 'typographic') {
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = isDarkMode ? '#050505' : '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'source-over'; 
+    }
+
+    //    if (showGridLines) {
         ctx.fillStyle = isDarkMode ? '#10B981' : '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.strokeStyle = isDarkMode ? 'rgba(16,185,129,0.3)' : 'rgba(0,0,0,0.3)';
@@ -609,11 +707,11 @@ export default function App() {
             }
         }
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode]);
+  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle]); // Ditambahkan dependency renderStyle
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
-  return (
+  //  return (
     <div className={`flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden transition-colors ${isDarkMode ? 'bg-[#050505] text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'}`}>
       
       {/* --- PANEL KIRI --- */}
@@ -632,7 +730,6 @@ export default function App() {
 
         <div className="p-6 flex-1 flex flex-col space-y-7">
           
-          {/* --- ACCORDION 1: IMAGE OPERATIONS --- */}
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('ops')} className="w-full flex items-center justify-between focus:outline-none">
               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
@@ -660,7 +757,39 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* --- ACCORDION 2: EFFECT SPREAD MODE --- */}
+          {/* }
+          {/* --- ACCORDION BARU: RENDER STYLE --- */}
+          <div className="space-y-4">
+            <button onClick={() => toggleAccordion('style')} className="w-full flex items-center justify-between focus:outline-none">
+                <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Render Style</h2>
+                <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.style ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            {accordions.style && (
+                <div className="grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {[
+                        { id: 'classic', label: 'Classic' },
+                        { id: 'glitch', label: 'Glitch' },
+                        { id: 'liquid', label: 'Liquid' },
+                        { id: 'zine', label: 'Zine' },
+                        { id: 'typographic', label: 'Typographic' }
+                    ].map(style => (
+                        <button
+                            key={style.id}
+                            onClick={() => setRenderStyle(style.id)}
+                            className={`px-2 py-2.5 text-[10px] font-bold uppercase tracking-widest rounded transition-all
+                                ${renderStyle === style.id
+                                    ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-black text-white shadow-md')
+                                    : (isDarkMode ? 'bg-[#111] text-[#888] border border-[#333] hover:text-[#ccc] hover:bg-[#222]' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-700 hover:bg-gray-200')
+                                } ${style.id === 'typographic' ? 'col-span-2' : ''}`}
+                        >
+                            {style.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('mode')} className="w-full flex items-center justify-between focus:outline-none">
               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
@@ -689,11 +818,10 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* --- ACCORDION 3: AUTO ANNOTATION --- */}
           <div className="space-y-3">
              <button onClick={() => toggleAccordion('ai')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
-               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ai ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
+                 <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ai ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
              </button>
              {accordions.ai && (
                <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -723,7 +851,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* --- ACCORDION 4: SLIT-SCAN OPTIONS --- */}
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('slit')} className="w-full flex items-center justify-between focus:outline-none mb-2">
               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
@@ -759,7 +886,6 @@ export default function App() {
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* --- ACCORDION 5: VISUALS --- */}
           <div className="space-y-4">
              <button onClick={() => toggleAccordion('visuals')} className="w-full flex items-center justify-between focus:outline-none mb-2">
                <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
@@ -796,6 +922,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* }
       {/* --- PANEL KANAN --- */}
       <div 
         className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#050505]' : 'bg-[#E5E7EB]'}`}
@@ -855,7 +982,7 @@ export default function App() {
             ))}
          </div>
 
-         {/* --- FEATURE 2: VISUAL BRUSH FEEDBACK CURSOR --- */}
+         {/* VISUAL BRUSH FEEDBACK */}
          {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
             <div
                 className="fixed rounded-full pointer-events-none z-[9999]"
@@ -865,7 +992,7 @@ export default function App() {
                     width: brushSize,
                     height: brushSize,
                     transform: 'translate(-50%, -50%)',
-                    border: '2px solid #22d3ee', // border-cyan-400
+                    border: '2px solid #22d3ee', 
                     backgroundColor: 'rgba(34, 211, 238, 0.15)'
                 }}
             />
