@@ -130,6 +130,21 @@ export default function App() {
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
 
+  // --- FEATURE 1: ACCORDION LAYOUT STATE ---
+  const [accordions, setAccordions] = useState({
+      ops: true,
+      mode: true,
+      ai: true,
+      slit: true,
+      visuals: true
+  });
+  const toggleAccordion = (key) => setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // --- FEATURE 2 & 4: MOUSE POS & SPACEBAR EVENT STATE ---
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isHoveringWorkspace, setIsHoveringWorkspace] = useState(false);
+
   const fallbackWords = {
     'ID': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
     'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
@@ -157,6 +172,40 @@ export default function App() {
      handleRandomize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annoLang]);
+
+  // --- FEATURE 3: LOAD API KEY FROM LOCAL STORAGE ---
+  useEffect(() => {
+      const savedKey = localStorage.getItem('geminiApiKey');
+      if (savedKey) setApiKeyInput(savedKey);
+  }, []);
+
+  // --- FEATURE 4: WINDOW SPACEBAR EVENT LISTENER ---
+  useEffect(() => {
+      const handleKeyDown = (e) => {
+          if (e.code === 'Space') {
+              // Ignore if user is typing in an input
+              if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+              e.preventDefault();
+              setIsSpacePressed(true);
+              if (isPaintingRef.current) isPaintingRef.current = false; // Prevent stuck painting
+          }
+      };
+      const handleKeyUp = (e) => {
+          if (e.code === 'Space') {
+              if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+              e.preventDefault();
+              setIsSpacePressed(false);
+              setIsPanning(false); 
+          }
+      };
+      
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+      return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+      };
+  }, []);
 
   const processFile = (file) => {
     if (file && file.type.startsWith('image/')) {
@@ -189,7 +238,6 @@ export default function App() {
     link.click();
   };
 
-  // --- LOGIKA AI (GEMINI 3.1 FLASH LITE) ---
   const handleAiAnalysis = async () => {
     if (!image) return; 
     if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Please enter your Gemini Token (API Key) first."); return; }
@@ -207,13 +255,11 @@ export default function App() {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
-        // Gemini API membutuhkan raw base64 tanpa prefix "data:image/jpeg;base64,"
         const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        // Memanggil API Resmi Google Gemini dengan model 3.1-flash-lite
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 
@@ -227,7 +273,7 @@ export default function App() {
                             {
                                 inline_data: {
                                     mime_type: "image/jpeg",
-                                    data: base64DataRaw // Data base64 mentah
+                                    data: base64DataRaw 
                                 }
                             }
                         ]
@@ -252,6 +298,8 @@ export default function App() {
             const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
             if (words.length > 0) { 
                 setAiWords(words); 
+                // --- FEATURE 3: SAVE API KEY TO LOCAL STORAGE ---
+                localStorage.setItem('geminiApiKey', apiKey);
                 alert("Gemini AI Analysis Successful!"); 
             }
         } else {
@@ -267,12 +315,15 @@ export default function App() {
     }
   };
 
+  // --- FEATURE 4: DYNAMIC TOOL SELECTION OVERRIDE ---
+  const currentTool = isSpacePressed ? 'pan' : activeTool;
+
   const handleWorkspacePointerDown = (e) => {
     if (!image) return;
-    if (activeTool === 'pan') {
+    if (currentTool === 'pan') {
       setIsPanning(true);
       e.target.setPointerCapture(e.pointerId);
-    } else if (activeTool === 'brush' && isManualMode) {
+    } else if (currentTool === 'brush' && isManualMode) {
       isPaintingRef.current = true;
       e.target.setPointerCapture(e.pointerId);
       addMaskPoint(e);
@@ -280,6 +331,9 @@ export default function App() {
   };
 
   const handleWorkspacePointerMove = (e) => {
+    // --- FEATURE 2: MOUSE POS UPDATE ---
+    setMousePos({ x: e.clientX, y: e.clientY });
+
     if (draggingGuide) {
       e.preventDefault();
       const rect = viewportRef.current.getBoundingClientRect();
@@ -292,7 +346,7 @@ export default function App() {
     else if (isPanning) {
       setPan(prev => ({ x: prev.x + e.nativeEvent.movementX, y: prev.y + e.nativeEvent.movementY }));
     } 
-    else if (isPaintingRef.current && activeTool === 'brush' && isManualMode) {
+    else if (isPaintingRef.current && currentTool === 'brush' && isManualMode) {
       addMaskPoint(e);
     }
   };
@@ -339,6 +393,7 @@ export default function App() {
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
 
+  // --- JANGAN DIUBAH: FULL LOGIKA MATH & RENDER ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -576,119 +631,160 @@ export default function App() {
         </div>
 
         <div className="p-6 flex-1 flex flex-col space-y-7">
+          
+          {/* --- ACCORDION 1: IMAGE OPERATIONS --- */}
           <div className="space-y-4">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
-            <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black text-white hover:bg-gray-800'}`}>
-              Upload Image
+            <button onClick={() => toggleAccordion('ops')} className="w-full flex items-center justify-between focus:outline-none">
+              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
+              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ops ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
-            <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
-            <div className="flex space-x-3">
-              <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
-              <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
-            </div>
-            <div className="pt-2">
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                    <span>Image Scale (Bleed)</span>
-                    <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#222] text-[#00FFFF]' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
+            {accordions.ops && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black text-white hover:bg-gray-800'}`}>
+                  Upload Image
+                </button>
+                <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
+                <div className="flex space-x-3">
+                  <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
+                  <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
                 </div>
-                <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
-            </div>
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          <div className="space-y-4">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
-            <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
-                <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
-                <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
-            </div>
-            {isManualMode && (
-                <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-[#0a0a0a] border-[#00FFFF]/30' : 'bg-blue-50 border-blue-100'}`}>
-                    <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-700'}`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
-                    <div>
-                        <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                            <span>Brush Size</span><span className={`${isDarkMode ? 'text-[#00FFFF] font-mono' : ''}`}>{brushSize}</span>
-                        </div>
-                        <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
+                <div className="pt-2">
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                        <span>Image Scale (Bleed)</span>
+                        <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#222] text-[#00FFFF]' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
                     </div>
-                    <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition ${isDarkMode ? 'bg-[#222] border border-[#333] text-[#ccc] hover:bg-[#333]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
+                    <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
                 </div>
+              </div>
             )}
           </div>
           <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          <div className="space-y-3">
-             <div className="flex items-center justify-between mb-2">
-                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
-                 <div className={`flex p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
-                     {['EN', 'JP', 'ID'].map(lang => (
-                         <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
-                     ))}
-                 </div>
-             </div>
-             <div>
-                 <input type="password" placeholder="Gemini Token (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
-                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Gemini API Token here</a>
-             </div>
-             <div className="flex items-center gap-3 pt-1">
-                 <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Auto Analysis</span>
-                     <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GEMINI</span>
-                 </div>
-                 <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
-                     {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
-                 </button>
-             </div>
-             <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Generated texts: <span className={`font-bold ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-500'}`}>{aiWords.length} words</span> ({annoLang}).</p>
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          <div className="space-y-5">
-            <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
-            <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Cut Complexity</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{complexity}%</span></div>
-                <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
-            </div>
-            <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{density}%</span></div>
-                <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} disabled={isManualMode} />
-            </div>
-            <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className={`font-bold ${isDarkMode ? 'text-[#00FFFF] font-mono' : 'text-blue-500'}`}>{stretchInt}%</span></div>
-                <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
-            </div>
-            <div>
-                <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className={`font-bold ${isDarkMode ? 'text-red-500 font-mono' : 'text-red-500'}`}>{brutalInt}%</span></div>
-                <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#222]' : 'bg-red-200'}`} />
-            </div>
-            <div className="flex items-center justify-between pt-2">
-                <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Stretch Direction</span>
-                <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-100 border-gray-200'}`}>
-                    <button className={`px-3 py-1.5 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
-                    <button className={`px-3 py-1.5 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
-                </div>
-            </div>
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
+          {/* --- ACCORDION 2: EFFECT SPREAD MODE --- */}
           <div className="space-y-4">
-             <h2 className={`text-xs font-bold uppercase tracking-wider mb-2 font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
-             <label className="flex items-center justify-between cursor-pointer">
-                 <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
-                 <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#10B981]' : 'accent-blue-600'}`} />
-             </label>
-             <div className="space-y-3">
-                 <label className="flex items-center justify-between cursor-pointer">
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Annotation Text</span>
-                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#00FFFF]' : 'accent-blue-600'}`} />
-                 </label>
-                 {showTextAnnotations && (
-                     <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`}>
-                         <span className={`text-xs font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Text Color</span>
-                         <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
+            <button onClick={() => toggleAccordion('mode')} className="w-full flex items-center justify-between focus:outline-none">
+              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
+              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.mode ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            {accordions.mode && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
+                    <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
+                    <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
+                </div>
+                {isManualMode && (
+                    <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-[#0a0a0a] border-[#00FFFF]/30' : 'bg-blue-50 border-blue-100'}`}>
+                        <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-700'}`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
+                        <div>
+                            <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                                <span>Brush Size</span><span className={`${isDarkMode ? 'text-[#00FFFF] font-mono' : ''}`}>{brushSize}</span>
+                            </div>
+                            <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
+                        </div>
+                        <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition ${isDarkMode ? 'bg-[#222] border border-[#333] text-[#ccc] hover:bg-[#333]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
+                    </div>
+                )}
+              </div>
+            )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+
+          {/* --- ACCORDION 3: AUTO ANNOTATION --- */}
+          <div className="space-y-3">
+             <button onClick={() => toggleAccordion('ai')} className="w-full flex items-center justify-between focus:outline-none mb-2">
+               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
+               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ai ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+             </button>
+             {accordions.ai && (
+               <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                 <div className="flex items-center justify-end mb-2">
+                     <div className={`flex p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
+                         {['EN', 'JP', 'ID'].map(lang => (
+                             <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
+                         ))}
                      </div>
-                 )}
-             </div>
+                 </div>
+                 <div>
+                     <input type="password" placeholder="Gemini Token (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
+                     <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Gemini API Token here</a>
+                 </div>
+                 <div className="flex items-center gap-3 pt-1">
+                     <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
+                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Auto Analysis</span>
+                         <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GEMINI</span>
+                     </div>
+                     <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
+                         {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
+                     </button>
+                 </div>
+                 <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Generated texts: <span className={`font-bold ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-500'}`}>{aiWords.length} words</span> ({annoLang}).</p>
+               </div>
+             )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+
+          {/* --- ACCORDION 4: SLIT-SCAN OPTIONS --- */}
+          <div className="space-y-4">
+            <button onClick={() => toggleAccordion('slit')} className="w-full flex items-center justify-between focus:outline-none mb-2">
+              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
+              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.slit ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            {accordions.slit && (
+              <div className="space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Cut Complexity</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{complexity}%</span></div>
+                    <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{density}%</span></div>
+                    <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} disabled={isManualMode} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className={`font-bold ${isDarkMode ? 'text-[#00FFFF] font-mono' : 'text-blue-500'}`}>{stretchInt}%</span></div>
+                    <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className={`font-bold ${isDarkMode ? 'text-red-500 font-mono' : 'text-red-500'}`}>{brutalInt}%</span></div>
+                    <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#222]' : 'bg-red-200'}`} />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Stretch Direction</span>
+                    <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-100 border-gray-200'}`}>
+                        <button className={`px-3 py-1.5 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
+                        <button className={`px-3 py-1.5 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
+                    </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+
+          {/* --- ACCORDION 5: VISUALS --- */}
+          <div className="space-y-4">
+             <button onClick={() => toggleAccordion('visuals')} className="w-full flex items-center justify-between focus:outline-none mb-2">
+               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
+               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.visuals ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+             </button>
+             {accordions.visuals && (
+               <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                 <label className="flex items-center justify-between cursor-pointer">
+                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
+                     <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#10B981]' : 'accent-blue-600'}`} />
+                 </label>
+                 <div className="space-y-3">
+                     <label className="flex items-center justify-between cursor-pointer">
+                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Annotation Text</span>
+                         <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#00FFFF]' : 'accent-blue-600'}`} />
+                     </label>
+                     {showTextAnnotations && (
+                         <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`}>
+                             <span className={`text-xs font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Text Color</span>
+                             <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
+                         </div>
+                     )}
+                 </div>
+               </div>
+             )}
           </div>
         </div>
 
@@ -703,9 +799,14 @@ export default function App() {
       {/* --- PANEL KANAN --- */}
       <div 
         className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#050505]' : 'bg-[#E5E7EB]'}`}
+        onPointerEnter={() => setIsHoveringWorkspace(true)}
+        onPointerLeave={(e) => {
+            setIsHoveringWorkspace(false);
+            handleWorkspacePointerUp(e);
+        }}
         onPointerMove={handleWorkspacePointerMove}
+        onPointerDown={handleWorkspacePointerDown}
         onPointerUp={handleWorkspacePointerUp}
-        onPointerLeave={handleWorkspacePointerUp}
       >
          
          <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}></div>
@@ -727,7 +828,6 @@ export default function App() {
          <div 
             className="absolute top-[24px] left-[24px] right-0 bottom-0 overflow-hidden"
             ref={viewportRef}
-            onPointerDown={handleWorkspacePointerDown}
             onWheel={(e) => {
                 e.preventDefault();
                 if (e.deltaY < 0) setViewScale(v => Math.min(v + 0.1, 5));
@@ -737,7 +837,7 @@ export default function App() {
             <div 
                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${viewScale})`, transformOrigin: 'center' }}
                className={`w-full h-full flex items-center justify-center transition-transform duration-75
-                           ${activeTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+                           ${currentTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (currentTool === 'brush' && isManualMode ? 'cursor-none' : 'cursor-crosshair')}`}
             >
                <canvas ref={canvasRef} className={`shadow-[0_0_50px_rgba(0,0,0,0.8)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
             </div>
@@ -755,10 +855,26 @@ export default function App() {
             ))}
          </div>
 
+         {/* --- FEATURE 2: VISUAL BRUSH FEEDBACK CURSOR --- */}
+         {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
+            <div
+                className="fixed rounded-full pointer-events-none z-[9999]"
+                style={{
+                    left: mousePos.x,
+                    top: mousePos.y,
+                    width: brushSize,
+                    height: brushSize,
+                    transform: 'translate(-50%, -50%)',
+                    border: '2px solid #22d3ee', // border-cyan-400
+                    backgroundColor: 'rgba(34, 211, 238, 0.15)'
+                }}
+            />
+         )}
+
          <div className={`absolute top-[44px] left-[44px] backdrop-blur-md border rounded-md shadow-2xl flex flex-col z-50 overflow-hidden ${isDarkMode ? 'bg-[#0a0a0a]/90 border-[#222]' : 'bg-[#2D2D2D]/95 border-[#444]'}`}>
             <button 
                 className={`p-3 transition flex items-center justify-center ${activeTool==='pan' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
-                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas)"
+                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas) - Shortcut: Spacebar"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
             </button>
