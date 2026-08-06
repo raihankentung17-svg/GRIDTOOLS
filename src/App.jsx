@@ -413,6 +413,8 @@ export default function App() {
     const relScale = Math.max(1, canvas.width / 1000); 
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
+    
+    // Fill base background based on theme (except typographic which needs transparency for masking)
     ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -521,21 +523,20 @@ export default function App() {
     }
 
     if (renderStyle === 'typographic') {
+        // 1. Bersihkan canvas agar mask teks bisa bekerja (transparan murni)
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = isDarkMode ? '#FFFFFF' : '#000000';
+        
+        // 2. Ambil satu kata dari aiWords (atau fallback)
+        const word = (aiWords && aiWords.length > 0) ? aiWords[0] : 'STRETCH';
+        
+        // 3. Cetak teks TEPAT di tengah dengan ukuran super raksasa
+        ctx.fillStyle = '#000000'; // hitam murni
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.font = `900 ${canvas.width / 4}px sans-serif`;
+        ctx.fillText(word, canvas.width / 2, canvas.height / 2);
         
-        const stableIndex = Math.floor((seed % 100) / 100 * aiWords.length) || 0;
-        const word = aiWords[stableIndex] || 'STRETCH';
-        
-        let fontSize = canvas.width / Math.max(word.length * 0.4, 1);
-        if (fontSize < 100) fontSize = 100;
-        ctx.font = `900 ${fontSize}px sans-serif`;
-
-        for(let yPos = fontSize/2; yPos <= canvas.height + fontSize; yPos += fontSize * 0.85) {
-            ctx.fillText(word, canvas.width/2, yPos);
-        }
+        // 4. SETELAH teks dicetak, ubah composite menjadi source-in
         ctx.globalCompositeOperation = 'source-in';
     }
 
@@ -543,6 +544,7 @@ export default function App() {
         ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
     }
 
+    // 5. Lakukan rendering gambar persis seperti biasa
     normalPass.forEach(op => {
         if (op.type === 'empty') {
             ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF';
@@ -600,6 +602,11 @@ export default function App() {
         }
     });
 
+    // 6. KEMBALIKAN ctx.globalCompositeOperation = 'source-over'
+    if (renderStyle === 'typographic') {
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
     ctx.filter = 'none';
 
     if (renderStyle === 'zine') {
@@ -623,6 +630,7 @@ export default function App() {
     }
 
     if (renderStyle === 'typographic') {
+        // Beri warna background solid (hitam/putih) di BELAKANG teks/gambar
         ctx.globalCompositeOperation = 'destination-over';
         ctx.fillStyle = isDarkMode ? '#050505' : '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -680,9 +688,9 @@ export default function App() {
                 const num = Math.floor(rng() * 50) + 1;
                 
                 ctx.fillStyle = textColor;
-                ctx.font = `900 ${mainFont}px monospace`;
+                ctx.font = `900 ${mainFont}px sans-serif`;
                 ctx.fillText(word, x, y - spacing1);
-                ctx.font = `${subFont}px monospace`;
+                ctx.font = `${subFont}px sans-serif`;
                 ctx.fillText(`${num}+`, x, y + spacing2);
                 ctx.fillRect(x, y + spacing3, barWidth, barHeight);
                 count++;
