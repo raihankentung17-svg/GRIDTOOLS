@@ -414,7 +414,6 @@ export default function App() {
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
     
-    // Fill base background based on theme (except typographic which needs transparency for masking)
     ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -522,29 +521,10 @@ export default function App() {
         }
     }
 
-    if (renderStyle === 'typographic') {
-        // 1. Bersihkan canvas agar mask teks bisa bekerja (transparan murni)
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // 2. Ambil satu kata dari aiWords (atau fallback)
-        const word = (aiWords && aiWords.length > 0) ? aiWords[0] : 'STRETCH';
-        
-        // 3. Cetak teks TEPAT di tengah dengan ukuran super raksasa
-        ctx.fillStyle = '#000000'; // hitam murni
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = `900 ${canvas.width / 4}px sans-serif`;
-        ctx.fillText(word, canvas.width / 2, canvas.height / 2);
-        
-        // 4. SETELAH teks dicetak, ubah composite menjadi source-in
-        ctx.globalCompositeOperation = 'source-in';
-    }
-
     if (renderStyle === 'zine') {
         ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
     }
 
-    // 5. Lakukan rendering gambar persis seperti biasa
     normalPass.forEach(op => {
         if (op.type === 'empty') {
             ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF';
@@ -602,11 +582,6 @@ export default function App() {
         }
     });
 
-    // 6. KEMBALIKAN ctx.globalCompositeOperation = 'source-over'
-    if (renderStyle === 'typographic') {
-        ctx.globalCompositeOperation = 'source-over';
-    }
-
     ctx.filter = 'none';
 
     if (renderStyle === 'zine') {
@@ -627,14 +602,6 @@ export default function App() {
         ctx.fillStyle = ctx.createPattern(noiseCnv, 'repeat');
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
-    }
-
-    if (renderStyle === 'typographic') {
-        // Beri warna background solid (hitam/putih) di BELAKANG teks/gambar
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.fillStyle = isDarkMode ? '#050505' : '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.globalCompositeOperation = 'source-over'; 
     }
 
     if (showGridLines) {
@@ -758,8 +725,7 @@ export default function App() {
                         { id: 'classic', label: 'Classic' },
                         { id: 'glitch', label: 'Glitch' },
                         { id: 'liquid', label: 'Liquid' },
-                        { id: 'zine', label: 'Zine' },
-                        { id: 'typographic', label: 'Typographic' }
+                        { id: 'zine', label: 'Zine' }
                     ].map(style => (
                         <button
                             key={style.id}
@@ -768,7 +734,7 @@ export default function App() {
                                 ${renderStyle === style.id
                                     ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-black text-white shadow-md')
                                     : (isDarkMode ? 'bg-[#111] text-[#888] border border-[#333] hover:text-[#ccc] hover:bg-[#222]' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-700 hover:bg-gray-200')
-                                } ${style.id === 'typographic' ? 'col-span-2' : ''}`}
+                                }`}
                         >
                             {style.label}
                         </button>
