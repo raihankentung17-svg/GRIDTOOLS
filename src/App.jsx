@@ -406,49 +406,73 @@ export default function App() {
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
         const promptText = `Analyze this image and provide exactly 16 single-word aesthetic keywords describing its main subjects, visual elements, colors, or vibe (suitable for Swiss-style graphic design posters). The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                contents: [
-                    {
-                        parts: [
-                            { text: promptText },
-                            {
-                                inline_data: {
-                                    mime_type: "image/jpeg",
-                                    data: base64DataRaw 
-                                }
-                            }
-                        ]
-                    }
-                ],
-                generationConfig: {
-                    maxOutputTokens: 200,
-                    temperature: 0.7
-                }
-            })
-        });
+        // Daftar model dengan gemini-3.6-flash sebagai prioritas utama (sesuai rekomendasi resmi Gemini API), serta fallback otomatis
+        const candidateModels = [
+            'gemini-3.6-flash',
+            'gemini-3.1-flash-lite',
+            'gemini-2.0-flash',
+            'gemini-1.5-flash',
+            'gemini-2.5-flash'
+        ];
 
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error?.message || `API Error: ${response.status}`);
-        }
-        
-        let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-            text = text.replace(/`/g, '').replace(/csv/g, '').trim();
-            const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
-            if (words.length > 0) { 
-                setAiWords(words); 
-                localStorage.setItem('geminiApiKey', apiKey);
-                alert(`Gemini AI Analysis Successful! Extracted ${words.length} design keywords.`); 
+        let success = false;
+        let lastErrorMessage = '';
+
+        for (const modelName of candidateModels) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        contents: [
+                            {
+                                parts: [
+                                    { text: promptText },
+                                    {
+                                        inline_data: {
+                                            mime_type: "image/jpeg",
+                                            data: base64DataRaw 
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        generationConfig: {
+                            maxOutputTokens: 200,
+                            temperature: 0.7
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    lastErrorMessage = data.error?.message || `API Error: ${response.status}`;
+                    // Jika model tidak tersedia atau deprecated, otomatis coba model berikutnya
+                    continue;
+                }
+                
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    text = text.replace(/`/g, '').replace(/csv/g, '').trim();
+                    const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
+                    if (words.length > 0) { 
+                        setAiWords(words); 
+                        localStorage.setItem('geminiApiKey', apiKey);
+                        alert(`Gemini AI Analysis Successful (${modelName})!\nExtracted ${words.length} design keywords.`); 
+                        success = true;
+                        break;
+                    }
+                }
+            } catch (err) {
+                lastErrorMessage = err.message;
             }
-        } else {
-            throw new Error("Empty response from AI.");
+        }
+
+        if (!success) {
+            throw new Error(lastErrorMessage || "Empty response from Gemini AI.");
         }
     } catch (err) {
         console.error("AI API Error:", err);
