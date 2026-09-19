@@ -7,7 +7,7 @@ function mulberry32(a) {
       t = Math.imul(t ^ t >>> 15, t | 1);
       t ^= t + Math.imul(t ^ t >>> 7, t | 61);
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
+    };
 }
 
 // --- Komponen Penggaris Dinamis (Dynamic Ruler) ---
@@ -25,12 +25,12 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = isDarkMode ? '#222222' : '#F9FAFB'; 
+        ctx.fillStyle = isDarkMode ? '#141414' : '#F3F4F6'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = isDarkMode ? '#999999' : '#6B7280'; 
-        ctx.strokeStyle = isDarkMode ? '#555555' : '#D1D5DB'; 
-        ctx.font = '9px sans-serif';
+        ctx.fillStyle = isDarkMode ? '#888888' : '#6B7280'; 
+        ctx.strokeStyle = isDarkMode ? '#333333' : '#D1D5DB'; 
+        ctx.font = '9px monospace';
         ctx.textBaseline = 'top';
         ctx.lineWidth = 1;
 
@@ -115,31 +115,50 @@ export default function App() {
   const fileInputRef = useRef(null);
   const viewportRef = useRef(null);
 
+  // Slit-scan core parameters
   const [scale, setScale] = useState(80); 
-  const [complexity, setComplexity] = useState(60); 
+  const [complexity, setComplexity] = useState(55); 
   const [density, setDensity] = useState(65);       
   const [stretchInt, setStretchInt] = useState(72); 
   const [brutalInt, setBrutalInt] = useState(25); 
   const [stretchDirX, setStretchDirX] = useState(true);
   const [stretchDirY, setStretchDirY] = useState(true);
-  const [showGridLines, setShowGridLines] = useState(true);
-  const [showTextAnnotations, setShowTextAnnotations] = useState(true);
+
+  // --- FITUR BARU: KOTAK PEMBINGKAI SCRATCH & TIPOGRAFI PRESISI (Sesuai Referensi) ---
+  const [showScratchBoxes, setShowScratchBoxes] = useState(true);
+  const [showBoxTypography, setShowBoxTypography] = useState(true);
+  const [showCutoutCards, setShowCutoutCards] = useState(true);
+  const [boxBorderWidth, setBoxBorderWidth] = useState(1);
+  const [boxBorderColor, setBoxBorderColor] = useState('auto'); // 'auto', '#000000', '#ffffff', '#10B981', '#00FFFF'
+  const [cutoutCardDensity, setCutoutCardDensity] = useState(18); // persentase kartu cutout
+  const [boxNumberFormat, setBoxNumberFormat] = useState('plus'); // 'plus' (1+), 'standard' (1), 'pad' (01)
+  const [boxFontSize, setBoxFontSize] = useState(100); // persentase ukuran font (50% - 160%)
+  const [boxCardStyle, setBoxCardStyle] = useState('white'); // 'white' (editorial), 'dark', 'outline'
+
+  // Visuals & legacy annotations
+  const [showGridLines, setShowGridLines] = useState(false);
+  const [showTextAnnotations, setShowTextAnnotations] = useState(false);
   const [textColor, setTextColor] = useState('#00FFFF'); 
   
   const [renderStyle, setRenderStyle] = useState('classic'); 
   const [canvasFormat, setCanvasFormat] = useState('original');
+  const [exportMultiplier, setExportMultiplier] = useState(1);
 
+  // AI State
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
 
+  // Accordion state
   const [accordions, setAccordions] = useState({
+      presets: true,
       ops: true,
-      mode: true,
-      style: true,
-      ai: true,
+      boxes: true, // Seksi baru: Kotak & Tipografi
       slit: true,
-      visuals: true
+      style: false,
+      mode: false,
+      ai: false,
+      visuals: false
   });
   const toggleAccordion = (key) => setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -147,10 +166,11 @@ export default function App() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHoveringWorkspace, setIsHoveringWorkspace] = useState(false);
 
+  // Kosakata tipografi tematik (dengan kosakata botani editorial seperti pada gambar brokoli)
   const fallbackWords = {
-    'ID': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
-    'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
-    'JP': ['緑', '葉', '自然', 'テキスト', 'シンプル', 'デザイン', 'グリッド', '植物', '枝', 'フラット', 'クリア', 'ストレッチ']
+    'ID': ['BROKOLI', 'HIJAU', 'DAUN', 'ALAMI', 'TEKSTUR', 'BATANG', 'SEGAR', 'ORGANIK', 'STRUKTUR', 'PADAT', 'BUNGA', 'BOTANI'],
+    'EN': ['BROCCOLI', 'FLORETS', 'VERDANT', 'ISOLATED', 'TREE-LIKE', 'BUMPY', 'DENSE', 'CRISP', 'CULINARY', 'CANOPY', 'ORGANIC', 'STEM', 'WHOLESOME', 'SUPERFOOD', 'EMERALD', 'BOTANICAL'],
+    'JP': ['ブロッコリー', '新緑', '葉', '自然', 'テクスチャ', '茎', '新鮮', '有機', 'グリッド', '密集', '植物', 'ボタニカル']
   };
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
 
@@ -180,6 +200,7 @@ export default function App() {
       if (savedKey) setApiKeyInput(savedKey);
   }, []);
 
+  // Keyboard shortcut Spacebar untuk pan tool
   useEffect(() => {
       const handleKeyDown = (e) => {
           if (e.code === 'Space') {
@@ -197,7 +218,6 @@ export default function App() {
               setIsPanning(false); 
           }
       };
-      
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
       return () => {
@@ -227,14 +247,141 @@ export default function App() {
   const handleUpload = (e) => processFile(e.target.files[0]);
   const handleRotate = () => { setRotation((prev) => (prev + 90) % 360); maskPointsRef.current = []; };
   const handleRandomize = () => setSeed(Math.random() * 10000);
+
+  // --- DEMO SAMPLE GENERATOR (Brokoli Editorial bawaan) ---
+  const loadDemoBroccoli = () => {
+    const svgData = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900">
+      <rect width="900" height="900" fill="#FFFFFF"/>
+      <defs>
+        <radialGradient id="gradStalk" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#9cd44f"/>
+          <stop offset="80%" stop-color="#6ba62b"/>
+          <stop offset="100%" stop-color="#4a7c18"/>
+        </radialGradient>
+        <radialGradient id="gradDarkLeaf" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#2d6e35"/>
+          <stop offset="60%" stop-color="#1b4d24"/>
+          <stop offset="100%" stop-color="#0f2e15"/>
+        </radialGradient>
+        <radialGradient id="gradBrightLeaf" cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stop-color="#48a04f"/>
+          <stop offset="70%" stop-color="#246a30"/>
+          <stop offset="100%" stop-color="#14421b"/>
+        </radialGradient>
+      </defs>
+      <!-- Stalk Batang Utama -->
+      <path d="M400 460 C405 600 370 720 370 820 L530 820 C530 720 495 600 500 460 Z" fill="url(#gradStalk)"/>
+      <path d="M420 540 C340 600 270 660 250 720 L310 735 C330 685 390 635 440 580 Z" fill="#75b332"/>
+      <path d="M480 540 C560 600 630 660 650 720 L590 735 C570 685 510 635 460 580 Z" fill="#75b332"/>
+      <!-- Mahkota Kanopi Brokoli -->
+      <circle cx="450" cy="340" r="170" fill="url(#gradDarkLeaf)"/>
+      <circle cx="330" cy="280" r="140" fill="url(#gradBrightLeaf)"/>
+      <circle cx="570" cy="280" r="140" fill="url(#gradDarkLeaf)"/>
+      <circle cx="230" cy="370" r="125" fill="url(#gradBrightLeaf)"/>
+      <circle cx="670" cy="370" r="125" fill="url(#gradBrightLeaf)"/>
+      <circle cx="310" cy="450" r="120" fill="url(#gradDarkLeaf)"/>
+      <circle cx="590" cy="450" r="120" fill="url(#gradBrightLeaf)"/>
+      <circle cx="450" cy="210" r="130" fill="url(#gradBrightLeaf)"/>
+      <!-- Tekstur Organik Floret Brokoli -->
+      <circle cx="410" cy="290" r="45" fill="#58ad5b" opacity="0.9"/>
+      <circle cx="490" cy="290" r="50" fill="#32853c" opacity="0.9"/>
+      <circle cx="370" cy="360" r="55" fill="#205f29" opacity="0.9"/>
+      <circle cx="530" cy="360" r="55" fill="#3a9144" opacity="0.9"/>
+      <circle cx="450" cy="420" r="60" fill="#1b4d24" opacity="0.9"/>
+      <circle cx="270" cy="320" r="40" fill="#48a04f" opacity="0.9"/>
+      <circle cx="630" cy="320" r="40" fill="#2d6e35" opacity="0.9"/>
+      <circle cx="280" cy="420" r="45" fill="#1f5424" opacity="0.9"/>
+      <circle cx="620" cy="420" r="45" fill="#398540" opacity="0.9"/>
+    </svg>`;
+    const img = new Image();
+    img.onload = () => {
+      setImage(img);
+      setSeed(4281);
+      maskPointsRef.current = [];
+      setViewScale(1);
+      setPan({ x: 0, y: 0 });
+      applyPreset('editorial');
+    };
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgData);
+  };
+
+  // --- PRESET SYSTEM (1-Klik Tampilan Siap Pakai) ---
+  const applyPreset = (presetName) => {
+    if (presetName === 'editorial') {
+      // Persis karya seni referensi brokoli:
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(true);
+      setBoxCardStyle('white');
+      setBoxBorderWidth(1);
+      setBoxBorderColor('auto');
+      setBoxNumberFormat('plus');
+      setBoxFontSize(100);
+      setCutoutCardDensity(20);
+      setRenderStyle('classic');
+      setStretchInt(75);
+      setComplexity(50);
+      setDensity(65);
+      setStretchDirX(true);
+      setStretchDirY(true);
+      setBrutalInt(20);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+    } else if (presetName === 'cyber') {
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(false);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#00FFFF');
+      setBoxNumberFormat('pad');
+      setRenderStyle('glitch');
+      setStretchInt(90);
+      setComplexity(65);
+      setTextColor('#00FFFF');
+    } else if (presetName === 'zine') {
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(true);
+      setBoxCardStyle('white');
+      setBoxBorderWidth(2);
+      setBoxBorderColor('#000000');
+      setBoxNumberFormat('standard');
+      setRenderStyle('zine');
+      setBrutalInt(55);
+      setComplexity(45);
+    } else if (presetName === 'minimal') {
+      setShowScratchBoxes(false);
+      setShowBoxTypography(false);
+      setShowCutoutCards(false);
+      setRenderStyle('classic');
+      setStretchInt(60);
+    }
+  };
   
   const handleExport = (format) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `grid-stretch-${Date.now()}.${format}`;
-    link.href = canvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
-    link.click();
+
+    if (exportMultiplier === 1) {
+      const link = document.createElement('a');
+      link.download = `grid-stretch-${Date.now()}.${format}`;
+      link.href = canvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
+      link.click();
+    } else {
+      // High-res export (2x scale)
+      const hiResCanvas = document.createElement('canvas');
+      hiResCanvas.width = canvas.width * exportMultiplier;
+      hiResCanvas.height = canvas.height * exportMultiplier;
+      const hCtx = hiResCanvas.getContext('2d');
+      hCtx.imageSmoothingEnabled = true;
+      hCtx.imageSmoothingQuality = 'high';
+      hCtx.drawImage(canvas, 0, 0, hiResCanvas.width, hiResCanvas.height);
+      const link = document.createElement('a');
+      link.download = `grid-stretch-hires-${exportMultiplier}x-${Date.now()}.${format}`;
+      link.href = hiResCanvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
+      link.click();
+    }
   };
 
   const handleAiAnalysis = async () => {
@@ -257,9 +404,9 @@ export default function App() {
         const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
-        const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
+        const promptText = `Analyze this image and provide exactly 16 single-word aesthetic keywords describing its main subjects, visual elements, colors, or vibe (suitable for Swiss-style graphic design posters). The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json'
@@ -279,7 +426,7 @@ export default function App() {
                     }
                 ],
                 generationConfig: {
-                    maxOutputTokens: 150,
+                    maxOutputTokens: 200,
                     temperature: 0.7
                 }
             })
@@ -298,7 +445,7 @@ export default function App() {
             if (words.length > 0) { 
                 setAiWords(words); 
                 localStorage.setItem('geminiApiKey', apiKey);
-                alert("Gemini AI Analysis Successful!"); 
+                alert(`Gemini AI Analysis Successful! Extracted ${words.length} design keywords.`); 
             }
         } else {
             throw new Error("Empty response from AI.");
@@ -389,6 +536,7 @@ export default function App() {
 
   const clearMask = () => { maskPointsRef.current = []; drawCanvas(); };
 
+  // --- LOGIKA UTAMA PENGGAMBARAN KANVAS ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -397,19 +545,19 @@ export default function App() {
     if (!image) {
       const rect = canvas.parentElement.getBoundingClientRect();
       canvas.width = rect.width || 800; canvas.height = rect.height || 600;
-      ctx.fillStyle = isDarkMode ? '#050505' : '#FFFFFF'; 
+      ctx.fillStyle = isDarkMode ? '#080808' : '#F9FAFB'; 
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = '24px sans-serif'; 
-      ctx.fillStyle = isDarkMode ? '#555' : '#9CA3AF';
-      ctx.fillText('Please upload an image from the left panel', canvas.width/2, canvas.height/2);
+      ctx.font = '600 16px sans-serif'; 
+      ctx.fillStyle = isDarkMode ? '#666' : '#9CA3AF';
+      ctx.fillText('Unggah gambar atau gunakan tombol "Demo Brokoli" untuk memulai', canvas.width/2, canvas.height/2);
       return;
     }
 
     const rng = mulberry32(seed);
     const isRotated = rotation % 180 !== 0;
     
-    // --- KODE LOGIKA FORMAT KANVAS ---
+    // Format ukuran kanvas
     const formats = {
         'original': { w: image.width, h: image.height },
         'square': { w: 1080, h: 1080 },
@@ -428,6 +576,7 @@ export default function App() {
     
     ctx.imageSmoothingEnabled = brutalInt < 50; 
     
+    // Background canvas
     ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -449,8 +598,9 @@ export default function App() {
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    const numCols = Math.floor(10 + (complexity / 100) * 80);
-    const numRows = Math.floor(10 + (complexity / 100) * 80);
+    // Pembuatan Garis Potong (Cuts)
+    const numCols = Math.floor(8 + (complexity / 100) * 70);
+    const numRows = Math.floor(8 + (complexity / 100) * 70);
     
     let xCuts = [0, canvas.width];
     for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
@@ -462,7 +612,8 @@ export default function App() {
 
     const stretchProb = Math.min(stretchInt, 100) / 100; 
     const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
-    const pEmpty = (1 - (density / 100)) * 0.6; 
+    const pEmpty = (1 - (density / 100)) * 0.5; 
+    const pCardCutout = showCutoutCards ? (cutoutCardDensity / 100) * 0.4 : 0;
     const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
 
     const checkMask = (testNX, testNY) => {
@@ -478,7 +629,9 @@ export default function App() {
 
     const normalPass = [];
     const stretchPass = [];
+    const cutoutCardPass = [];
 
+    // Partisi sel ke dalam kategori: stretch, card, empty, normal
     for (let i = 0; i < xCuts.length - 1; i++) {
         for (let j = 0; j < yCuts.length - 1; j++) {
             const x = xCuts[i]; const y = yCuts[j];
@@ -491,19 +644,26 @@ export default function App() {
 
             let applyStretch = false;
             let applyEmpty = false;
+            let applyCard = false;
 
             if (isManualMode) {
                 applyStretch = checkMask(cellCenterNX, cellCenterNY);
             } else {
                 const r = rng();
-                if (r < pEmpty) applyEmpty = true;
-                else if (r < pEmpty + stretchProb) applyStretch = true;
+                if (showCutoutCards && r < pCardCutout && w >= 30 * relScale && h >= 22 * relScale) {
+                    applyCard = true;
+                } else if (r < pCardCutout + pEmpty) {
+                    applyEmpty = true;
+                } else if (r < pCardCutout + pEmpty + stretchProb) {
+                    applyStretch = true;
+                }
             }
 
-            if (applyEmpty) {
+            if (applyCard) {
+                cutoutCardPass.push({ x, y, w, h, dstW, dstH });
+            } else if (applyEmpty) {
                 normalPass.push({ type: 'empty', x, y, dstW, dstH });
-            } 
-            else if (applyStretch) {
+            } else if (applyStretch) {
                 let isHoriz = rng() > 0.5;
                 if (!stretchDirX && stretchDirY) isHoriz = false;
                 if (stretchDirX && !stretchDirY) isHoriz = true;
@@ -539,6 +699,7 @@ export default function App() {
         ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
     }
 
+    // Pass 1: Gambar Normal & Empty Gap
     normalPass.forEach(op => {
         if (op.type === 'empty') {
             ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF';
@@ -548,6 +709,7 @@ export default function App() {
         }
     });
 
+    // Pass 2: Gambar Slit-Scan Streaks
     stretchPass.forEach(op => {
         let srcX = op.x; let srcY = op.y;
         let srcW = op.w; let srcH = op.h;
@@ -598,6 +760,23 @@ export default function App() {
 
     ctx.filter = 'none';
 
+    // Pass 3: Kartu Cutout Solid (Putih Bersih / Kontras sesuai Referensi Brokoli)
+    if (showCutoutCards && cutoutCardPass.length > 0) {
+        cutoutCardPass.forEach(card => {
+            ctx.save();
+            if (boxCardStyle === 'white') {
+                ctx.fillStyle = '#FFFFFF';
+            } else if (boxCardStyle === 'dark') {
+                ctx.fillStyle = isDarkMode ? '#111111' : '#1F2937';
+            } else {
+                ctx.fillStyle = isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.8)';
+            }
+            ctx.fillRect(card.x, card.y, card.w, card.h);
+            ctx.restore();
+        });
+    }
+
+    // Pass 4: Tekstur Zine Grain (jika zine aktif)
     if (renderStyle === 'zine') {
         const noiseCnv = document.createElement('canvas');
         noiseCnv.width = 100; noiseCnv.height = 100;
@@ -618,6 +797,116 @@ export default function App() {
         ctx.restore();
     }
 
+    // --- FITUR UTAMA 1: KOTAK BINGKAI SCRATCH & CUTOUT CARDS ---
+    if (showScratchBoxes) {
+        ctx.save();
+        const strokeW = Math.max(1, Math.floor(boxBorderWidth * relScale));
+        ctx.lineWidth = strokeW;
+
+        // Menggambar bingkai pada sel stretch & kartu cutout
+        const boxesToStroke = [...stretchPass, ...cutoutCardPass];
+
+        boxesToStroke.forEach(box => {
+            // Evaluasi warna border
+            if (boxBorderColor === 'auto') {
+                // Jika ini adalah kartu putih, gunakan garis hitam pekat seperti referensi
+                if (cutoutCardPass.includes(box) && boxCardStyle === 'white') {
+                    ctx.strokeStyle = '#000000';
+                } else {
+                    ctx.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.75)';
+                }
+            } else {
+                ctx.strokeStyle = boxBorderColor;
+            }
+
+            // Offset 0.5px untuk garis yang sangat tajam (crisp 1px borders)
+            ctx.strokeRect(Math.floor(box.x) + 0.5, Math.floor(box.y) + 0.5, Math.floor(box.w), Math.floor(box.h));
+        });
+
+        ctx.restore();
+    }
+
+    // --- FITUR UTAMA 2: TIPOGRAFI KOLOM KOTAK PRESISI (Uppercase Word + Index Number) ---
+    if (showBoxTypography) {
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        // Tentukan kandidat kotak berlabel (kartu cutout selalu diprioritaskan, diikuti kotak stretch berukuran layak)
+        const labeledBoxes = [];
+        cutoutCardPass.forEach(card => labeledBoxes.push({ ...card, isCard: true }));
+        stretchPass.forEach(box => {
+            // Hanya beri label jika kotak memiliki ruang cukup
+            if (box.w >= 36 * relScale && box.h >= 24 * relScale) {
+                labeledBoxes.push({ ...box, isCard: false });
+            }
+        });
+
+        // Urutkan kotak berdasarkan posisi vertikal lalu horizontal agar penomoran rapi
+        labeledBoxes.sort((a, b) => {
+            if (Math.abs(a.y - b.y) > 40 * relScale) return a.y - b.y;
+            return a.x - b.x;
+        });
+
+        const fontScale = boxFontSize / 100;
+        const mainFontSize = Math.max(8, Math.floor(12 * relScale * fontScale));
+        const subFontSize = Math.max(7, Math.floor(9.5 * relScale * fontScale));
+        const padX = Math.max(3, Math.floor(4 * relScale));
+        const padY = Math.max(2, Math.floor(3 * relScale));
+
+        let indexCounter = 1;
+
+        labeledBoxes.forEach((box, idx) => {
+            const word = aiWords[idx % aiWords.length] || 'GRID';
+            
+            // Format angka sesuai referensi brokoli (misal: 1, 3+, 6, 7, 10+, 16, 18+, 20+, 32+, dst.)
+            let numDisplay;
+            if (boxNumberFormat === 'plus') {
+                // Angka pertama '1' tanpa plus, berikutnya dengan plus seperti di referensi
+                numDisplay = indexCounter === 1 ? '1' : `${indexCounter}+`;
+            } else if (boxNumberFormat === 'pad') {
+                numDisplay = String(indexCounter).padStart(2, '0');
+            } else {
+                numDisplay = `${indexCounter}`;
+            }
+
+            // Tentukan kontras warna teks
+            let textFill;
+            if (box.isCard && boxCardStyle === 'white') {
+                textFill = '#000000'; // Selalu hitam pekat di atas kartu putih (persis referensi)
+            } else if (box.isCard && boxCardStyle === 'dark') {
+                textFill = '#FFFFFF';
+            } else {
+                // Di atas stretch pixels
+                textFill = isDarkMode ? '#FFFFFF' : '#000000';
+            }
+
+            ctx.fillStyle = textFill;
+
+            // Baris 1: Kata Deskriptif (Uppercase Bold Grotesk)
+            ctx.font = `900 ${mainFontSize}px "Helvetica Neue", Arial, sans-serif`;
+            // Pastikan kata muat dalam lebar kotak, jika terlalu panjang potong dengan rapi
+            const maxTextW = box.w - padX * 2;
+            let renderWord = word;
+            if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
+                renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
+            }
+            ctx.fillText(renderWord, Math.floor(box.x + padX), Math.floor(box.y + padY));
+
+            // Baris 2: Indeks Angka (tepat di bawah kata)
+            if (box.h >= (mainFontSize + subFontSize + padY * 2)) {
+                ctx.font = `700 ${subFontSize}px "Helvetica Neue", Arial, monospace`;
+                ctx.fillText(numDisplay, Math.floor(box.x + padX), Math.floor(box.y + padY + mainFontSize + Math.floor(2 * relScale)));
+            }
+
+            // Lonjakan angka acak bertahap agar menciptakan nomor seperti 1, 3, 6, 7, 10, 16...
+            indexCounter += (idx % 3 === 0 ? 1 : (idx % 2 === 0 ? 2 : 3));
+        });
+
+        ctx.restore();
+    }
+
+    // --- VISUAL TAMBAHAN LAMA (Opsional / Kompatibilitas) ---
     if (showGridLines) {
         ctx.fillStyle = isDarkMode ? '#10B981' : '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
@@ -678,83 +967,323 @@ export default function App() {
             }
         }
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat]); // Tambahkan canvasFormat ke dalam dependencies
+  }, [
+    image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY,
+    showScratchBoxes, showBoxTypography, showCutoutCards, boxBorderWidth, boxBorderColor, cutoutCardDensity, boxNumberFormat, boxFontSize, boxCardStyle,
+    showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat
+  ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
   return (
-    <div className={`flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden transition-colors ${isDarkMode ? 'bg-[#050505] text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'}`}>
+    <div className={`flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden transition-colors ${isDarkMode ? 'bg-[#080808] text-[#e5e5e5]' : 'bg-[#F3F4F6] text-gray-900'}`}>
       
-      {/* --- PANEL KIRI --- */}
-      <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
-                      ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-white border-gray-200'}`}>
+      {/* --- SIDEBAR PANEL KONTROL KIRI --- */}
+      <div className={`w-full md:w-[360px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
+                      ${isDarkMode ? 'bg-[#0e0e0e] border-[#1e1e1e]' : 'bg-white border-gray-200'}`}>
         
-        <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-50 border-gray-100'}`}>
+        {/* HEADER BRAND & MODE TOGGLE */}
+        <div className={`p-5 border-b flex justify-between items-center transition-colors duration-200 ${isDarkMode ? 'bg-[#121212] border-[#1e1e1e]' : 'bg-gray-50 border-gray-100'}`}>
           <div>
-            <h1 className={`text-xl font-bold tracking-tight font-mono ${isDarkMode ? 'text-[#10B981]' : 'text-gray-900'}`}>GRID STUDIO</h1>
-            <p className={`text-xs mt-1 font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Generative Distortion Engine</p>
+            <div className="flex items-center space-x-2">
+              <h1 className={`text-lg font-black tracking-tight font-mono ${isDarkMode ? 'text-[#10B981]' : 'text-gray-900'}`}>GRID STUDIO</h1>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isDarkMode ? 'bg-[#1a1a1a] text-[#00FFFF] border border-[#333]' : 'bg-gray-200 text-gray-700'}`}>v2.0 PRO</span>
+            </div>
+            <p className={`text-[11px] mt-0.5 font-medium ${isDarkMode ? 'text-[#777]' : 'text-gray-500'}`}>Generative Slit-Scan & Box Engine</p>
           </div>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`} title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)} 
+            className={`p-2 rounded-lg transition-all ${isDarkMode ? 'bg-[#1e1e1e] hover:bg-[#282828] text-yellow-400 border border-[#333]' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'}`} 
+            title={isDarkMode ? "Ganti ke Light Mode" : "Ganti ke Dark Mode"}
+          >
              {isDarkMode ? '☀️' : '🌙'}
           </button>
         </div>
 
-        <div className="p-6 flex-1 flex flex-col space-y-7">
+        {/* PRESET CEPAT 1-KLIK (BARU) */}
+        <div className={`p-4 border-b ${isDarkMode ? 'bg-[#0f0f0f] border-[#1e1e1e]' : 'bg-gray-50/80 border-gray-100'}`}>
+           <div className="flex items-center justify-between mb-2">
+             <span className={`text-[10px] font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#666]' : 'text-gray-400'}`}>Presets Siap Pakai</span>
+             <button onClick={loadDemoBroccoli} className={`text-[10px] font-bold px-2 py-0.5 rounded transition ${isDarkMode ? 'bg-[#10B981]/20 text-[#10B981] hover:bg-[#10B981]/30' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}>🥦 Demo Brokoli</button>
+           </div>
+           <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { id: 'editorial', label: '🥦 Editorial Box', desc: 'Gaya Poster Brokoli' },
+                { id: 'cyber', label: '⚡ Cyber Slit', desc: 'Glitch & Neon' },
+                { id: 'zine', label: '📰 Brutal Zine', desc: 'High Contrast' },
+                { id: 'minimal', label: '🎛️ Raw Slit', desc: 'Tanpa Kotak' }
+              ].map(p => (
+                 <button
+                   key={p.id}
+                   onClick={() => applyPreset(p.id)}
+                   className={`p-2 text-left rounded-md transition-all border ${isDarkMode ? 'bg-[#161616] border-[#262626] hover:border-[#10B981] text-gray-300' : 'bg-white border-gray-200 hover:border-black text-gray-800 shadow-sm'}`}
+                 >
+                   <div className="text-[11px] font-bold">{p.label}</div>
+                   <div className={`text-[9px] ${isDarkMode ? 'text-[#777]' : 'text-gray-500'}`}>{p.desc}</div>
+                 </button>
+              ))}
+           </div>
+        </div>
+
+        {/* CONTAINER KONTROL ACCORDION */}
+        <div className="p-5 flex-1 flex flex-col space-y-6">
           
+          {/* 1. KOTAK & TIPOGRAFI PRESISI (FITUR UTAMA BARU SESUAI GAMBAR) */}
+          <div className="space-y-3">
+            <button onClick={() => toggleAccordion('boxes')} className="w-full flex items-center justify-between focus:outline-none">
+              <div className="flex items-center space-x-2">
+                <span className="text-emerald-500">◻</span>
+                <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#aaa]' : 'text-gray-800'}`}>Framed Boxes & Typography</h2>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${showScratchBoxes ? (isDarkMode ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-emerald-100 text-emerald-800') : 'text-gray-500'}`}>
+                {showScratchBoxes ? 'ON' : 'OFF'}
+              </span>
+            </button>
+            
+            {accordions.boxes && (
+              <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                
+                {/* Master Switch: Kotak Pembingkai Scratch */}
+                <div className={`p-3 rounded-lg border flex items-center justify-between ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                   <div>
+                      <div className="text-xs font-bold">Kotak Pembingkai Scratch</div>
+                      <div className={`text-[10px] ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Bingkai persegi panjang di setiap sel scratch</div>
+                   </div>
+                   <input 
+                     type="checkbox" 
+                     checked={showScratchBoxes} 
+                     onChange={(e) => setShowScratchBoxes(e.target.checked)} 
+                     className="w-4.5 h-4.5 accent-[#10B981] cursor-pointer" 
+                   />
+                </div>
+
+                {/* Master Switch: Tipografi Kolom Kotak */}
+                <div className={`p-3 rounded-lg border flex items-center justify-between ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                   <div>
+                      <div className="text-xs font-bold">Tipografi Kolom Kotak</div>
+                      <div className={`text-[10px] ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Kata bold uppercase + indeks angka (1, 3+)</div>
+                   </div>
+                   <input 
+                     type="checkbox" 
+                     checked={showBoxTypography} 
+                     onChange={(e) => setShowBoxTypography(e.target.checked)} 
+                     className="w-4.5 h-4.5 accent-[#10B981] cursor-pointer" 
+                   />
+                </div>
+
+                {/* Master Switch: Kartu Cutout Solid (Putih Bersih) */}
+                <div className={`p-3 rounded-lg border flex items-center justify-between ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                   <div>
+                      <div className="text-xs font-bold">Kartu Cutout Solid (Putih)</div>
+                      <div className={`text-[10px] ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Kartu berlatar solid dengan label kontras</div>
+                   </div>
+                   <input 
+                     type="checkbox" 
+                     checked={showCutoutCards} 
+                     onChange={(e) => setShowCutoutCards(e.target.checked)} 
+                     className="w-4.5 h-4.5 accent-[#10B981] cursor-pointer" 
+                   />
+                </div>
+
+                {/* Pengaturan Detail Kotak & Garis */}
+                {showScratchBoxes && (
+                  <div className={`p-3 rounded-lg border space-y-3.5 ${isDarkMode ? 'bg-[#111] border-[#252525]' : 'bg-white border-gray-200'}`}>
+                    <div className="flex items-center justify-between">
+                       <span className={`text-[11px] font-semibold ${isDarkMode ? 'text-[#aaa]' : 'text-gray-700'}`}>Ketebalan Garis Border</span>
+                       <div className="flex space-x-1">
+                          {[1, 2].map(w => (
+                             <button
+                               key={w}
+                               onClick={() => setBoxBorderWidth(w)}
+                               className={`px-2.5 py-1 text-[10px] font-mono font-bold rounded ${boxBorderWidth === w ? (isDarkMode ? 'bg-[#10B981] text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-100 text-gray-600')}`}
+                             >
+                               {w}px
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                       <span className={`text-[11px] font-semibold ${isDarkMode ? 'text-[#aaa]' : 'text-gray-700'}`}>Warna Garis Border</span>
+                       <div className="flex space-x-1">
+                          {[
+                            { id: 'auto', label: 'Auto' },
+                            { id: '#000000', label: 'Black' },
+                            { id: '#ffffff', label: 'White' },
+                            { id: '#00FFFF', label: 'Cyan' }
+                          ].map(c => (
+                             <button
+                               key={c.id}
+                               onClick={() => setBoxBorderColor(c.id)}
+                               className={`px-2 py-1 text-[10px] font-mono rounded ${boxBorderColor === c.id ? (isDarkMode ? 'bg-[#10B981] text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-100 text-gray-600')}`}
+                             >
+                               {c.label}
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+
+                    {showCutoutCards && (
+                      <div>
+                        <div className={`flex justify-between text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-[#aaa]' : 'text-gray-700'}`}>
+                           <span>Kepadatan Kartu Cutout</span>
+                           <span className="font-mono text-emerald-500">{cutoutCardDensity}%</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="5" 
+                          max="40" 
+                          value={cutoutCardDensity} 
+                          onChange={(e) => setCutoutCardDensity(Number(e.target.value))} 
+                          className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} 
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Pengaturan Detail Tipografi Kolom Kotak */}
+                {showBoxTypography && (
+                  <div className={`p-3 rounded-lg border space-y-3.5 ${isDarkMode ? 'bg-[#111] border-[#252525]' : 'bg-white border-gray-200'}`}>
+                    <div className="flex items-center justify-between">
+                       <span className={`text-[11px] font-semibold ${isDarkMode ? 'text-[#aaa]' : 'text-gray-700'}`}>Format Angka Indeks</span>
+                       <div className="flex space-x-1">
+                          {[
+                            { id: 'plus', label: '1, 3+' },
+                            { id: 'standard', label: '1, 2, 3' },
+                            { id: 'pad', label: '01, 02' }
+                          ].map(fmt => (
+                             <button
+                               key={fmt.id}
+                               onClick={() => setBoxNumberFormat(fmt.id)}
+                               className={`px-2 py-1 text-[10px] font-mono rounded ${boxNumberFormat === fmt.id ? (isDarkMode ? 'bg-[#10B981] text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-100 text-gray-600')}`}
+                             >
+                               {fmt.label}
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+
+                    <div>
+                      <div className={`flex justify-between text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-[#aaa]' : 'text-gray-700'}`}>
+                         <span>Skala Ukuran Teks</span>
+                         <span className="font-mono text-emerald-500">{boxFontSize}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="60" 
+                        max="160" 
+                        value={boxFontSize} 
+                        onChange={(e) => setBoxFontSize(Number(e.target.value))} 
+                        className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} 
+                      />
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
+
+          {/* 2. IMAGE OPERATIONS & FORMAT */}
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('ops')} className="w-full flex items-center justify-between focus:outline-none">
               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ops ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {accordions.ops && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black text-white hover:bg-gray-800'}`}>
-                  Upload Image
-                </button>
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="flex space-x-2">
+                  <button onClick={() => fileInputRef.current.click()} className={`flex-1 py-3 rounded-lg font-bold text-xs transition shadow active:scale-95 ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669]' : 'bg-black text-white hover:bg-gray-800'}`}>
+                    Upload Image
+                  </button>
+                  <button onClick={loadDemoBroccoli} className={`px-3 py-3 rounded-lg font-bold text-xs transition border ${isDarkMode ? 'bg-[#1a1a1a] border-[#333] text-gray-300 hover:bg-[#252525]' : 'bg-gray-100 border-gray-300 text-gray-800 hover:bg-gray-200'}`} title="Muat contoh brokoli">
+                    🥦 Demo
+                  </button>
+                </div>
                 <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
-                <div className="flex space-x-3">
-                  <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
-                  <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
+                
+                <div className="flex space-x-2">
+                  <button onClick={handleRotate} className={`flex-1 text-xs py-2 rounded-md font-medium transition ${isDarkMode ? 'bg-[#1a1a1a] text-[#ccc] hover:bg-[#252525] border border-[#2a2a2a]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate 90°</button>
+                  <button onClick={handleRandomize} className={`flex-1 text-xs py-2 rounded-md font-medium transition ${isDarkMode ? 'bg-[#1a1a1a] text-[#ccc] hover:bg-[#252525] border border-[#2a2a2a]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
                 </div>
                 
-                {/* CANVAS FORMAT UI */}
-                <div className="mb-4 mt-4">
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                {/* Canvas Format */}
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
                         <span>Canvas Format</span>
                     </div>
                     <select 
                         value={canvasFormat} 
                         onChange={(e) => setCanvasFormat(e.target.value)}
-                        className={`w-full text-xs p-2.5 border rounded-md focus:outline-none appearance-none cursor-pointer ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500'}`}
+                        className={`w-full text-xs p-2.5 border rounded-md focus:outline-none appearance-none cursor-pointer ${isDarkMode ? 'bg-[#141414] border-[#2a2a2a] text-white focus:border-[#10B981]' : 'bg-gray-50 border-gray-300 text-gray-900'}`}
                     >
-                        <option value="original">Original Image</option>
+                        <option value="original">Original Image Aspect</option>
                         <option value="square">Square (1080 x 1080) - Feed</option>
                         <option value="portrait">Portrait (1080 x 1350) - IG</option>
-                        <option value="landscape">Landscape (1920 x 1080) - Video/Web</option>
+                        <option value="landscape">Landscape (1920 x 1080) - Video</option>
                         <option value="story">Story / Reels (1080 x 1920)</option>
                         <option value="a4">A4 Zine Poster (1240 x 1754)</option>
                     </select>
                 </div>
 
-                <div className="pt-2">
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
                         <span>Image Scale (Bleed)</span>
-                        <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#222] text-[#00FFFF]' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
+                        <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${isDarkMode ? 'bg-[#222] text-[#00FFFF]' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
                     </div>
                     <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
                 </div>
               </div>
             )}
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
 
+          {/* 3. SLIT-SCAN DISTORTION PARAMETERS */}
+          <div className="space-y-4">
+            <button onClick={() => toggleAccordion('slit')} className="w-full flex items-center justify-between focus:outline-none">
+              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Parameters</h2>
+              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.slit ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            {accordions.slit && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Cut Complexity</span><span className="text-[#10B981] font-mono text-[11px]">{complexity}%</span></div>
+                    <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span><span className="text-[#10B981] font-mono text-[11px]">{density}%</span></div>
+                    <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} disabled={isManualMode} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Stretch Intensity (Streak)</span><span className={`font-bold font-mono text-[11px] ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-500'}`}>{stretchInt}%</span></div>
+                    <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
+                </div>
+                <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className="font-bold font-mono text-red-500 text-[11px]">{brutalInt}%</span></div>
+                    <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#222]' : 'bg-red-200'}`} />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Arah Stretch</span>
+                    <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#141414] border-[#2a2a2a]' : 'bg-gray-100 border-gray-200'}`}>
+                        <button className={`px-3 py-1 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] border border-[#444]' : 'bg-white text-black shadow-sm') : 'text-gray-500'}`} onClick={() => setStretchDirX(!stretchDirX)}>Horizontal</button>
+                        <button className={`px-3 py-1 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] border border-[#444]' : 'bg-white text-black shadow-sm') : 'text-gray-500'}`} onClick={() => setStretchDirY(!stretchDirY)}>Vertical</button>
+                    </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
+
+          {/* 4. RENDER STYLES */}
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('style')} className="w-full flex items-center justify-between focus:outline-none">
                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Render Style</h2>
                 <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.style ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {accordions.style && (
-                <div className="grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="grid grid-cols-2 gap-2 animate-in fade-in duration-200">
                     {[
                         { id: 'classic', label: 'Classic' },
                         { id: 'glitch', label: 'Glitch' },
@@ -767,7 +1296,7 @@ export default function App() {
                             className={`px-2 py-2.5 text-[10px] font-bold uppercase tracking-widest rounded transition-all
                                 ${renderStyle === style.id
                                     ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-black text-white shadow-md')
-                                    : (isDarkMode ? 'bg-[#111] text-[#888] border border-[#333] hover:text-[#ccc] hover:bg-[#222]' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-700 hover:bg-gray-200')
+                                    : (isDarkMode ? 'bg-[#141414] text-[#888] border border-[#2a2a2a] hover:text-[#ccc]' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-700')
                                 }`}
                         >
                             {style.label}
@@ -776,143 +1305,122 @@ export default function App() {
                 </div>
             )}
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
 
+          {/* 5. EFFECT SPREAD (AUTO / MANUAL BRUSH) */}
           <div className="space-y-4">
             <button onClick={() => toggleAccordion('mode')} className="w-full flex items-center justify-between focus:outline-none">
               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.mode ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             {accordions.mode && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
-                    <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
-                    <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
+              <div className="space-y-3 animate-in fade-in duration-200">
+                <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#141414] border-[#2a2a2a]' : 'bg-gray-100 border-gray-200'}`}>
+                    <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : 'text-gray-500'}`}>Auto (Random)</button>
+                    <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : 'text-gray-500'}`}>Manual (Brush)</button>
                 </div>
                 {isManualMode && (
-                    <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-[#0a0a0a] border-[#00FFFF]/30' : 'bg-blue-50 border-blue-100'}`}>
-                        <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-700'}`}>🖌️ Swipe your cursor over the image to paint the effect.</p>
+                    <div className={`p-3.5 border rounded-lg space-y-3 ${isDarkMode ? 'bg-[#101010] border-[#00FFFF]/30' : 'bg-blue-50 border-blue-100'}`}>
+                        <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-700'}`}>🖌️ Sapukan kuas pada gambar di kanvas untuk melukis area efek stretch.</p>
                         <div>
-                            <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                                <span>Brush Size</span><span className={`${isDarkMode ? 'text-[#00FFFF] font-mono' : ''}`}>{brushSize}</span>
+                            <div className={`flex justify-between text-[10px] font-semibold mb-1.5 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                                <span>Brush Size</span><span className={`${isDarkMode ? 'text-[#00FFFF] font-mono' : ''}`}>{brushSize}px</span>
                             </div>
                             <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
                         </div>
-                        <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition ${isDarkMode ? 'bg-[#222] border border-[#333] text-[#ccc] hover:bg-[#333]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
+                        <button onClick={clearMask} className={`w-full text-[11px] py-2 rounded-md font-bold transition ${isDarkMode ? 'bg-[#1e1e1e] border border-[#333] text-[#ccc] hover:bg-[#282828]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Brush Mask</button>
                     </div>
                 )}
               </div>
             )}
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
 
+          {/* 6. AI AUTO ANNOTATION (GEMINI) */}
           <div className="space-y-3">
-             <button onClick={() => toggleAccordion('ai')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
+             <button onClick={() => toggleAccordion('ai')} className="w-full flex items-center justify-between focus:outline-none mb-1">
+                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>AI Auto Annotation</h2>
                  <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ai ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
              </button>
              {accordions.ai && (
-               <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                 <div className="flex items-center justify-end mb-2">
-                     <div className={`flex p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
+               <div className="space-y-3 animate-in fade-in duration-200">
+                 <div className="flex items-center justify-between">
+                     <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Language</span>
+                     <div className={`flex p-0.5 rounded-md border ${isDarkMode ? 'bg-[#141414] border-[#2a2a2a]' : 'bg-gray-100 border-gray-200'}`}>
                          {['EN', 'JP', 'ID'].map(lang => (
-                             <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${annoLang === lang ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
+                             <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-0.5 rounded ${annoLang === lang ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] border border-[#333]' : 'bg-white text-black shadow-sm') : 'text-gray-400'}`}>{lang}</button>
                          ))}
                      </div>
                  </div>
                  <div>
-                     <input type="password" placeholder="Gemini Token (AQ...)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
-                     <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Gemini API Token here</a>
+                     <input type="password" placeholder="Gemini API Key (AI Studio)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#141414] border-[#2a2a2a] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900'}`} />
+                     <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Dapatkan Gemini API Token gratis</a>
                  </div>
-                 <div className="flex items-center gap-3 pt-1">
-                     <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Auto Analysis</span>
-                         <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GEMINI</span>
-                     </div>
-                     <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
-                         {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
+                 <div className="flex items-center gap-2 pt-1">
+                     <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`w-full py-2.5 rounded-lg text-xs font-bold transition shadow flex items-center justify-center space-x-1.5 ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#1e1e1e] text-[#555] cursor-not-allowed' : 'bg-gray-300 text-gray-500 cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669]' : 'bg-gray-900 text-white hover:bg-black')}`}>
+                         <span>✨</span>
+                         <span>{isAiAnalyzing ? 'Menganalisis Subjek...' : 'Pindai Kata Kunci AI'}</span>
                      </button>
                  </div>
-                 <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Generated texts: <span className={`font-bold ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-500'}`}>{aiWords.length} words</span> ({annoLang}).</p>
+                 <p className={`text-[10px] font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Kata kunci saat ini: <span className="font-bold text-[#10B981]">{aiWords.length} kata</span> ({annoLang})</p>
                </div>
              )}
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
+          <hr className={`border-t ${isDarkMode ? 'border-[#1e1e1e]' : 'border-gray-200'}`} />
 
+          {/* 7. LEGACY VISUALS & OVERLAYS */}
           <div className="space-y-4">
-            <button onClick={() => toggleAccordion('slit')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
-              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.slit ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {accordions.slit && (
-              <div className="space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Cut Complexity</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{complexity}%</span></div>
-                    <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{density}%</span></div>
-                    <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} disabled={isManualMode} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className={`font-bold ${isDarkMode ? 'text-[#00FFFF] font-mono' : 'text-blue-500'}`}>{stretchInt}%</span></div>
-                    <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className={`font-bold ${isDarkMode ? 'text-red-500 font-mono' : 'text-red-500'}`}>{brutalInt}%</span></div>
-                    <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#222]' : 'bg-red-200'}`} />
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Stretch Direction</span>
-                    <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-100 border-gray-200'}`}>
-                        <button className={`px-3 py-1.5 rounded ${stretchDirX ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
-                        <button className={`px-3 py-1.5 rounded ${stretchDirY ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
-                    </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          <div className="space-y-4">
-             <button onClick={() => toggleAccordion('visuals')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
+             <button onClick={() => toggleAccordion('visuals')} className="w-full flex items-center justify-between focus:outline-none mb-1">
+               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Legacy Visuals & Guides</h2>
                <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.visuals ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
              </button>
              {accordions.visuals && (
-               <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+               <div className="space-y-3 animate-in fade-in duration-200">
                  <label className="flex items-center justify-between cursor-pointer">
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
-                     <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#10B981]' : 'accent-blue-600'}`} />
+                     <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Random Grid Lines</span>
+                     <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4 h-4 accent-[#10B981]" />
                  </label>
-                 <div className="space-y-3">
-                     <label className="flex items-center justify-between cursor-pointer">
-                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Annotation Text</span>
-                         <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className={`w-4.5 h-4.5 ${isDarkMode ? 'accent-[#00FFFF]' : 'accent-blue-600'}`} />
-                     </label>
-                     {showTextAnnotations && (
-                         <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`}>
-                             <span className={`text-xs font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Text Color</span>
-                             <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
-                         </div>
-                     )}
-                 </div>
+                 <label className="flex items-center justify-between cursor-pointer">
+                     <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Floating Annotations</span>
+                     <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4 h-4 accent-[#00FFFF]" />
+                 </label>
+                 {showTextAnnotations && (
+                     <div className={`flex items-center justify-between pl-3 border-l-2 ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`}>
+                         <span className={`text-xs font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Warna Teks</span>
+                         <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-6 h-6 p-0 border-0 rounded cursor-pointer bg-transparent" />
+                     </div>
+                 )}
                </div>
              )}
           </div>
         </div>
 
-        <div className={`p-6 border-t transition-colors duration-200 ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
-           <div className="flex space-x-3">
-              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-bold text-sm transition active:scale-95 ${isDarkMode ? 'bg-[#00FFFF] text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.3)]' : 'bg-black text-white hover:bg-gray-800'}`}>Export PNG</button>
-              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-bold text-sm transition active:scale-95 ${isDarkMode ? 'border-[#333] bg-[#222] text-[#ccc] hover:bg-[#333]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>Export JPG</button>
+        {/* BOTTOM EXPORT PANEL */}
+        <div className={`p-5 border-t transition-colors duration-200 ${isDarkMode ? 'bg-[#121212] border-[#1e1e1e]' : 'bg-gray-50 border-gray-200'}`}>
+           <div className="flex items-center justify-between mb-3 text-[11px]">
+              <span className={`font-semibold ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Resolusi Ekspor</span>
+              <div className="flex space-x-1">
+                 {[1, 2].map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setExportMultiplier(m)}
+                      className={`px-2 py-0.5 font-mono text-[10px] font-bold rounded ${exportMultiplier === m ? (isDarkMode ? 'bg-[#00FFFF] text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                    >
+                      {m}x {m === 2 ? '(Hi-Res)' : ''}
+                    </button>
+                 ))}
+              </div>
+           </div>
+           <div className="flex space-x-2">
+              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-bold text-xs transition active:scale-95 ${isDarkMode ? 'bg-[#00FFFF] text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.25)]' : 'bg-black text-white hover:bg-gray-800'}`}>Export PNG</button>
+              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-bold text-xs transition active:scale-95 ${isDarkMode ? 'border-[#333] bg-[#1a1a1a] text-[#ccc] hover:bg-[#252525]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>Export JPG</button>
            </div>
         </div>
       </div>
 
-      {/* --- PANEL KANAN --- */}
+      {/* --- WORKSPACE KANVAS KANAN --- */}
       <div 
-        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#050505]' : 'bg-[#E5E7EB]'}`}
+        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#080808]' : 'bg-[#E5E7EB]'}`}
         onPointerEnter={() => setIsHoveringWorkspace(true)}
         onPointerLeave={(e) => {
             setIsHoveringWorkspace(false);
@@ -923,22 +1431,28 @@ export default function App() {
         onPointerUp={handleWorkspacePointerUp}
       >
          
-         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}></div>
+         {/* Titik Sudut Rulers */}
+         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}></div>
 
+         {/* Ruler Horizontal */}
          <div 
-            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}
+            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'h')}
+            title="Tarik dari penggaris untuk membuat Garis Panduan Horizontal"
          >
             <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} isDarkMode={isDarkMode} />
          </div>
 
+         {/* Ruler Vertikal */}
          <div 
-            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}
+            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'v')}
+            title="Tarik dari penggaris untuk membuat Garis Panduan Vertikal"
          >
              <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
          </div>
 
+         {/* Viewport & Canvas Area */}
          <div 
             className="absolute top-[24px] left-[24px] right-0 bottom-0 overflow-hidden"
             ref={viewportRef}
@@ -953,9 +1467,10 @@ export default function App() {
                className={`w-full h-full flex items-center justify-center transition-transform duration-75
                            ${currentTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (currentTool === 'brush' && isManualMode ? 'cursor-none' : 'cursor-crosshair')}`}
             >
-               <canvas ref={canvasRef} className={`shadow-[0_0_50px_rgba(0,0,0,0.8)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
+               <canvas ref={canvasRef} className={`shadow-[0_0_50px_rgba(0,0,0,0.6)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
             </div>
 
+            {/* Draggable Guides */}
             {guides.map(g => (
                <div 
                   key={g.id}
@@ -964,12 +1479,12 @@ export default function App() {
                              ${g.type === 'h' ? 'left-0 right-0 h-[7px] -mt-[3px] cursor-ns-resize' : 'top-0 bottom-0 w-[7px] -ml-[3px] cursor-ew-resize'}`}
                   onPointerDown={(e) => { e.stopPropagation(); setDraggingGuide({id: g.id, type: g.type}); }}
                >
-                  <div className={`bg-[#00FFFF] shadow-[0_0_2px_#00FFFF] ${g.type === 'h' ? 'w-full h-[1px]' : 'h-full w-[1px]'}`}></div>
+                  <div className={`bg-[#00FFFF] shadow-[0_0_3px_#00FFFF] ${g.type === 'h' ? 'w-full h-[1px]' : 'h-full w-[1px]'}`}></div>
                </div>
             ))}
          </div>
 
-         {/* VISUAL BRUSH FEEDBACK */}
+         {/* Brush Visual Indicator (Feedback Kursor Manual) */}
          {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
             <div
                 className="fixed rounded-full pointer-events-none z-[9999]"
@@ -979,39 +1494,41 @@ export default function App() {
                     width: brushSize,
                     height: brushSize,
                     transform: 'translate(-50%, -50%)',
-                    border: '2px solid #22d3ee', 
-                    backgroundColor: 'rgba(34, 211, 238, 0.15)'
+                    border: '2px solid #00FFFF', 
+                    backgroundColor: 'rgba(0, 255, 255, 0.15)'
                 }}
             />
          )}
 
-         <div className={`absolute top-[44px] left-[44px] backdrop-blur-md border rounded-md shadow-2xl flex flex-col z-50 overflow-hidden ${isDarkMode ? 'bg-[#0a0a0a]/90 border-[#222]' : 'bg-[#2D2D2D]/95 border-[#444]'}`}>
+         {/* FLOATING TOOLS PALETTE */}
+         <div className={`absolute top-[40px] left-[40px] backdrop-blur-md border rounded-lg shadow-2xl flex flex-col z-50 overflow-hidden ${isDarkMode ? 'bg-[#121212]/90 border-[#262626]' : 'bg-white/95 border-gray-300'}`}>
             <button 
-                className={`p-3 transition flex items-center justify-center ${activeTool==='pan' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
-                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas) - Shortcut: Spacebar"
+                className={`p-2.5 transition flex items-center justify-center ${activeTool==='pan' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-sm' : 'bg-black text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-500 hover:text-black hover:bg-gray-100')}`}
+                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Kanvas) - Shortcut: Spacebar"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
             </button>
             <button 
-                className={`p-3 transition flex items-center justify-center ${activeTool==='brush' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
-                onClick={() => { setActiveTool('brush'); setIsManualMode(true); }} title="Brush Tool (Paint Effect Area)"
+                className={`p-2.5 transition flex items-center justify-center ${activeTool==='brush' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-sm' : 'bg-black text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-500 hover:text-black hover:bg-gray-100')}`}
+                onClick={() => { setActiveTool('brush'); setIsManualMode(true); }} title="Brush Tool (Lukis Area Stretch)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
             </button>
-            <div className={`h-[1px] w-full ${isDarkMode ? 'bg-[#222]' : 'bg-[#444]'}`}></div>
+            <div className={`h-[1px] w-full ${isDarkMode ? 'bg-[#262626]' : 'bg-gray-200'}`}></div>
             <button 
-                className="p-3 transition flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:text-red-400"
-                onClick={() => setGuides([])} title="Clear All Guides"
+                className="p-2.5 transition flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:text-red-400"
+                onClick={() => setGuides([])} title="Hapus Semua Garis Panduan (Clear Guides)"
             >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             </button>
          </div>
 
-         <div className={`absolute bottom-6 right-6 backdrop-blur-md text-xs rounded shadow-2xl flex items-center border overflow-hidden z-50 ${isDarkMode ? 'bg-[#0a0a0a]/90 text-[#ccc] border-[#222]' : 'bg-[#2D2D2D]/95 text-gray-300 border-[#444]'}`}>
-            <button className={`px-4 py-3 transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-[#444]'}`} onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
-            <span className={`px-3 font-mono border-x min-w-[65px] text-center ${isDarkMode ? 'border-[#222] text-[#00FFFF]' : 'border-[#444]'}`}>{Math.round(viewScale * 100)}%</span>
-            <button className={`px-4 py-3 transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-[#444]'}`} onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
-            <button className={`px-4 py-3 transition font-semibold ${isDarkMode ? 'hover:bg-[#222] text-[#10B981]' : 'hover:bg-[#444] text-blue-400'}`} onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Reset</button>
+         {/* ZOOM CONTROLS WIDGET */}
+         <div className={`absolute bottom-6 right-6 backdrop-blur-md text-xs rounded-lg shadow-2xl flex items-center border overflow-hidden z-50 ${isDarkMode ? 'bg-[#121212]/90 text-[#ccc] border-[#262626]' : 'bg-white/95 text-gray-700 border-gray-300'}`}>
+            <button className={`px-3 py-2 transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100'}`} onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
+            <span className={`px-2.5 font-mono text-[11px] border-x min-w-[55px] text-center font-bold ${isDarkMode ? 'border-[#262626] text-[#00FFFF]' : 'border-gray-200'}`}>{Math.round(viewScale * 100)}%</span>
+            <button className={`px-3 py-2 transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100'}`} onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
+            <button className={`px-3 py-2 transition font-bold ${isDarkMode ? 'hover:bg-[#222] text-[#10B981]' : 'hover:bg-gray-100 text-emerald-600'}`} onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Reset</button>
          </div>
 
       </div>
