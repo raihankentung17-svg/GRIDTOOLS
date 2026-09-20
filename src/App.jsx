@@ -289,10 +289,16 @@ function ManualDedicatedControls({
   setManualPlacementMode,
   manualBrushRole,
   setManualBrushRole,
+  slitDirection,
+  setSlitDirection,
   slitVConfig,
   setSlitVConfig,
   slitHConfig,
   setSlitHConfig,
+  stretchInt,
+  setStretchInt,
+  complexity,
+  setComplexity,
   cardConfig,
   setCardConfig,
   intactConfig,
@@ -314,6 +320,9 @@ function ManualDedicatedControls({
   showToast,
   setActiveTool
 }) {
+  const isSlitRole = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
+  const activeSlitWidth = slitDirection === 'h' ? slitHConfig.height : slitVConfig.width;
+
   return (
     <div className="space-y-3 pt-1">
       {/* 1. Mode Penempatan: Kanvas Bebas vs Partisi Bento */}
@@ -332,7 +341,7 @@ function ManualDedicatedControls({
             onClick={() => {
               setManualPlacementMode('freehand');
               setActiveTool('brush');
-              showToast('Mode Kanvas Bebas Aktif ✨ Klik untuk menaruh elemen presisi');
+              showToast('Mode Kanvas Bebas Aktif ✨ Klik atau usap langsung di kanvas');
             }}
             className={`py-1.5 px-2 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center justify-center space-x-1 ${manualPlacementMode === 'freehand' ? (isDarkMode ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : 'bg-cyan-700 text-white border-cyan-700 shadow-sm') : (isDarkMode ? 'bg-[#1e1e1e] border-[#303030] text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100')}`}
           >
@@ -354,7 +363,7 @@ function ManualDedicatedControls({
 
         <div className="text-[8.5px] leading-relaxed opacity-75 px-0.5">
           {manualPlacementMode === 'freehand'
-            ? '✨ Klik di kanvas langsung menaruh pita slit atau kartu spesimen berukuran presisi di bawah kursor.'
+            ? '✨ Klik sekali untuk menaruh elemen, atau tahan & sapukan kursor untuk melukis streak kontinu.'
             : '🍱 Mengubah atau mengusap peran sel yang ada di kisi partisi bento.'}
         </div>
 
@@ -366,7 +375,7 @@ function ManualDedicatedControls({
             title="Kosongkan seluruh grid untuk mulai dari foto asli murni"
           >
             <span>🧹</span>
-            <span>Mulai dari Kanvas Bersih ✨</span>
+            <span>Mulai Kanvas Bersih ✨</span>
           </button>
           <button
             onClick={() => {
@@ -383,18 +392,18 @@ function ManualDedicatedControls({
         </div>
       </div>
 
-      {/* 2. Pilihan 5 Peran Kuas dengan Ukuran Dedikasi */}
+      {/* 2. Pilihan Peran Kuas dengan Ukuran Dedikasi */}
       <div>
         <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-          Pilih Peran Kuas ({manualPlacementMode === 'freehand' ? 'Klik Taruh di Kanvas' : 'Usap Sel Bento'}):
+          Pilih Peran Kuas ({manualPlacementMode === 'freehand' ? 'Klik / Sapu di Kanvas' : 'Usap Sel Bento'}):
         </div>
         <div className="grid grid-cols-2 gap-1.5">
           {[
             {
               role: 'slit_scan',
               label: '🌊 Slit Scan',
-              sizeStr: `V:${slitVConfig.width}px / H:${slitHConfig.height}px`,
-              desc: 'Auto-arah: sapuan ↕ = vertikal, ↔ = horizontal',
+              sizeStr: `${activeSlitWidth}px • ${stretchInt}%`,
+              desc: 'Pita streak kontinu - klik satuan atau sapu bebas',
               color: 'text-cyan-400 border-cyan-500/50 bg-cyan-500/10 ring-cyan-400',
               colSpan: true
             },
@@ -423,12 +432,12 @@ function ManualDedicatedControls({
             <button
               key={item.role}
               onClick={() => {
-                setManualBrushRole(item.role === 'slit_scan' ? 'slit_v' : item.role);
+                setManualBrushRole(item.role);
                 setActiveTool('brush');
                 showToast(`Peran Kuas: ${item.label}`);
               }}
               className={`${item.colSpan ? 'col-span-2' : ''} p-2 text-left rounded-lg border transition-all cursor-pointer ${
-                (item.role === 'slit_scan' ? (manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') : manualBrushRole === item.role)
+                (item.role === 'slit_scan' ? isSlitRole : manualBrushRole === item.role)
                   ? `${item.color} font-bold ring-1 shadow-sm`
                   : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')
               }`}
@@ -445,27 +454,63 @@ function ManualDedicatedControls({
 
       {/* 3. Panel Konfigurasi Khusus Per Peran Kuas (DEDICATED CONTROLS) */}
 
-      {/* A. DEDICATED SLIT VERTICAL CONTROLS */}
-      {(manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && (
+      {/* A. UNIFIED SLIT SCAN CONTROLS (GABUNGAN LENGKAP) */}
+      {isSlitRole && (
         <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161b22] border-cyan-500/40' : 'bg-cyan-50/60 border-cyan-300'}`}>
           <div className="flex items-center justify-between">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-cyan-400' : 'text-cyan-800'}`}>
-              🌊 Pengaturan Pita Slit Vertikal
+              🌊 Pengaturan Slit Scan Terpadu
             </span>
             <span className="text-[9.5px] font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-500/40 px-1.5 py-0.5 rounded">
-              Lebar: {slitVConfig.width}px
+              {slitDirection === 'h' ? `${slitHConfig.height}px (H)` : slitDirection === 'v' ? `${slitVConfig.width}px (V)` : `${activeSlitWidth}px (Auto)`}
             </span>
           </div>
 
-          {/* Slider Lebar Pita Slit Vertikal */}
+          {/* 1. Arah Slit Scan */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Arah Slit Scan:
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {[
+                { id: 'auto', label: '🔄 Auto (Sapuan)', desc: 'Ikuti arah gerak' },
+                { id: 'v', label: '↕️ Vertikal', desc: 'Pita vertikal' },
+                { id: 'h', label: '↔️ Horizontal', desc: 'Pita horizontal' }
+              ].map(dir => (
+                <button
+                  key={dir.id}
+                  onClick={() => {
+                    if (setSlitDirection) setSlitDirection(dir.id);
+                    if (dir.id === 'v') setManualBrushRole('slit_v');
+                    else if (dir.id === 'h') setManualBrushRole('slit_h');
+                    else setManualBrushRole('slit_scan');
+                  }}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${
+                    (slitDirection || 'auto') === dir.id
+                      ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm'
+                      : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')
+                  }`}
+                >
+                  {dir.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Ukuran / Ketebalan Pita Slit */}
           <div>
             <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              <span>Lebar Pita Slit (Piksel Presisi):</span>
-              <span className="font-mono text-cyan-400 font-bold">{slitVConfig.width}px</span>
+              <span>Ketebalan Pita Slit (Piksel Presisi):</span>
+              <span className="font-mono text-cyan-400 font-bold">{activeSlitWidth}px</span>
             </div>
             <input
-              type="range" min="10" max="250" value={slitVConfig.width}
-              onChange={(e) => setSlitVConfig(prev => ({ ...prev, width: Number(e.target.value) }))}
+              type="range" min="10" max="250"
+              value={activeSlitWidth}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSlitVConfig(prev => ({ ...prev, width: val }));
+                setSlitHConfig(prev => ({ ...prev, height: val }));
+              }}
               className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
             />
             {/* Tombol Preset Lebar Cepat */}
@@ -478,8 +523,15 @@ function ManualDedicatedControls({
               ].map(p => (
                 <button
                   key={p.w}
-                  onClick={() => setSlitVConfig(prev => ({ ...prev, width: p.w }))}
-                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.width === p.w ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                  onClick={() => {
+                    setSlitVConfig(prev => ({ ...prev, width: p.w }));
+                    setSlitHConfig(prev => ({ ...prev, height: p.w }));
+                  }}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${
+                    activeSlitWidth === p.w
+                      ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm'
+                      : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')
+                  }`}
                 >
                   {p.label}
                 </button>
@@ -487,44 +539,83 @@ function ManualDedicatedControls({
             </div>
           </div>
 
-          {/* Jangkauan Vertikal: Penuh vs Lokal */}
+          {/* 3. Stretch Intensity (Panjang Streak & Blend - Bebas Keluar Kotak) */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Stretch Intensity (Panjang Streak & Bebas Keluar Kotak):</span>
+              <span className="font-mono text-cyan-400 font-bold">{stretchInt}%</span>
+            </div>
+            <input
+              type="range" min="10" max="250"
+              value={stretchInt}
+              onChange={(e) => {
+                if (setStretchInt) setStretchInt(Number(e.target.value));
+              }}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+            <div className="flex justify-between text-[8px] text-gray-500 mt-0.5 font-mono">
+              <span>50% (Pendek)</span>
+              <span>100% (Normal)</span>
+              <span className="text-cyan-400 font-bold">&gt;120% (Bebas Keluar Kotak 🚀)</span>
+            </div>
+          </div>
+
+          {/* 4. Jangkauan Bentangan: Penuh vs Lokal */}
           <div>
             <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              Jangkauan Bentangan Vertikal:
+              Jangkauan Bentangan:
             </div>
             <div className="grid grid-cols-2 gap-1">
               <button
-                onClick={() => setSlitVConfig(prev => ({ ...prev, reach: 'full' }))}
-                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.reach === 'full' ? 'bg-cyan-500 text-black border-cyan-400' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                onClick={() => {
+                  setSlitVConfig(prev => ({ ...prev, reach: 'full' }));
+                  setSlitHConfig(prev => ({ ...prev, reach: 'full' }));
+                }}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${
+                  slitVConfig.reach === 'full'
+                    ? 'bg-cyan-500 text-black border-cyan-400'
+                    : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')
+                }`}
               >
-                ↕️ Penuh (Atas-Bawah)
+                ↕️ Penuh (Ujung ke Ujung)
               </button>
               <button
-                onClick={() => setSlitVConfig(prev => ({ ...prev, reach: 'local' }))}
-                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.reach === 'local' ? 'bg-cyan-500 text-black border-cyan-400' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                onClick={() => {
+                  setSlitVConfig(prev => ({ ...prev, reach: 'local' }));
+                  setSlitHConfig(prev => ({ ...prev, reach: 'local' }));
+                }}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${
+                  slitVConfig.reach === 'local'
+                    ? 'bg-cyan-500 text-black border-cyan-400'
+                    : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')
+                }`}
               >
-                📍 Lokal (Tinggi Terbatas)
+                📍 Lokal (Ukuran Terbatas)
               </button>
             </div>
             {slitVConfig.reach === 'local' && (
               <div className="mt-1.5 pt-1.5 border-t border-dashed border-cyan-500/30">
                 <div className="flex justify-between text-[8.5px] text-gray-400 mb-0.5">
-                  <span>Tinggi Pita Lokal:</span>
+                  <span>Panjang Pita Lokal:</span>
                   <span className="font-mono text-cyan-400">{slitVConfig.height || 180}px</span>
                 </div>
                 <input
-                  type="range" min="60" max="500" value={slitVConfig.height || 180}
-                  onChange={(e) => setSlitVConfig(prev => ({ ...prev, height: Number(e.target.value) }))}
+                  type="range" min="60" max="600" value={slitVConfig.height || 180}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSlitVConfig(prev => ({ ...prev, height: val }));
+                    setSlitHConfig(prev => ({ ...prev, width: val }));
+                  }}
                   className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                 />
               </div>
             )}
           </div>
 
-          {/* Kerapatan Irisan Garis (Multi-Stripe) */}
+          {/* 5. Kerapatan Irisan Garis (Multi-Stripe) */}
           <div>
             <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              Kerapatan Irisan Garis:
+              Kerapatan Irisan Garis (Multi-Stripe):
             </div>
             <div className="grid grid-cols-4 gap-1">
               {[
@@ -535,8 +626,15 @@ function ManualDedicatedControls({
               ].map(item => (
                 <button
                   key={item.f}
-                  onClick={() => setSlitVConfig(prev => ({ ...prev, frequency: item.f }))}
-                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.frequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                  onClick={() => {
+                    setSlitVConfig(prev => ({ ...prev, frequency: item.f }));
+                    setSlitHConfig(prev => ({ ...prev, frequency: item.f }));
+                  }}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${
+                    slitVConfig.frequency === item.f
+                      ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm'
+                      : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')
+                  }`}
                 >
                   {item.label}
                 </button>
@@ -544,7 +642,7 @@ function ManualDedicatedControls({
             </div>
           </div>
 
-          {/* Opasitas Slit */}
+          {/* 6. Opasitas Slit */}
           <div>
             <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
               <span>Transparansi Slit:</span>
@@ -552,154 +650,42 @@ function ManualDedicatedControls({
             </div>
             <input
               type="range" min="20" max="100" value={slitVConfig.opacity}
-              onChange={(e) => setSlitVConfig(prev => ({ ...prev, opacity: Number(e.target.value) }))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSlitVConfig(prev => ({ ...prev, opacity: val }));
+                setSlitHConfig(prev => ({ ...prev, opacity: val }));
+              }}
               className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
             />
           </div>
 
-          {/* Toggles Panah & Label */}
+          {/* 7. Toggles Panah & Label */}
           <div className="flex space-x-1 pt-0.5">
             <button
-              onClick={() => setSlitVConfig(prev => ({ ...prev, showArrow: !prev.showArrow }))}
-              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.showArrow ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+              onClick={() => {
+                setSlitVConfig(prev => ({ ...prev, showArrow: !prev.showArrow }));
+                setSlitHConfig(prev => ({ ...prev, showArrow: !prev.showArrow }));
+              }}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${
+                slitVConfig.showArrow
+                  ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                  : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')
+              }`}
             >
-              Panah ↓: {slitVConfig.showArrow ? 'ON' : 'OFF'}
+              Panah (↓/→): {slitVConfig.showArrow ? 'ON' : 'OFF'}
             </button>
             <button
-              onClick={() => setSlitVConfig(prev => ({ ...prev, showLabel: !prev.showLabel }))}
-              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.showLabel ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+              onClick={() => {
+                setSlitVConfig(prev => ({ ...prev, showLabel: !prev.showLabel }));
+                setSlitHConfig(prev => ({ ...prev, showLabel: !prev.showLabel }));
+              }}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${
+                slitVConfig.showLabel
+                  ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                  : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')
+              }`}
             >
               Label Teks: {slitVConfig.showLabel ? 'ON' : 'OFF'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* B. DEDICATED SLIT HORIZONTAL CONTROLS */}
-      {(manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && (
-        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161c28] border-blue-500/40' : 'bg-blue-50/60 border-blue-300'}`}>
-          <div className="flex items-center justify-between">
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-blue-400' : 'text-blue-800'}`}>
-              🌊 Pengaturan Pita Slit Horizontal
-            </span>
-            <span className="text-[9.5px] font-mono font-bold text-blue-400 bg-blue-950/60 border border-blue-500/40 px-1.5 py-0.5 rounded">
-              Tinggi: {slitHConfig.height}px
-            </span>
-          </div>
-
-          {/* Slider Tinggi Pita Slit Horizontal */}
-          <div>
-            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              <span>Tinggi Pita Slit (Piksel Presisi):</span>
-              <span className="font-mono text-blue-400 font-bold">{slitHConfig.height}px</span>
-            </div>
-            <input
-              type="range" min="10" max="250" value={slitHConfig.height}
-              onChange={(e) => setSlitHConfig(prev => ({ ...prev, height: Number(e.target.value) }))}
-              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-400"
-            />
-            {/* Tombol Preset Tinggi Cepat */}
-            <div className="grid grid-cols-4 gap-1 mt-1.5">
-              {[
-                { h: 18, label: '18px (Slim)' },
-                { h: 36, label: '36px (Sedang)' },
-                { h: 72, label: '72px (Lebar)' },
-                { h: 140, label: '140px (Blok)' }
-              ].map(p => (
-                <button
-                  key={p.h}
-                  onClick={() => setSlitHConfig(prev => ({ ...prev, height: p.h }))}
-                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.height === p.h ? 'bg-blue-500 text-black border-blue-400 shadow-sm' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Jangkauan Horizontal: Penuh vs Lokal */}
-          <div>
-            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              Jangkauan Bentangan Horizontal:
-            </div>
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                onClick={() => setSlitHConfig(prev => ({ ...prev, reach: 'full' }))}
-                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.reach === 'full' ? 'bg-blue-500 text-black border-blue-400' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
-              >
-                ↔️ Penuh (Kiri-Kanan)
-              </button>
-              <button
-                onClick={() => setSlitHConfig(prev => ({ ...prev, reach: 'local' }))}
-                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.reach === 'local' ? 'bg-blue-500 text-black border-blue-400' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
-              >
-                📍 Lokal (Lebar Terbatas)
-              </button>
-            </div>
-            {slitHConfig.reach === 'local' && (
-              <div className="mt-1.5 pt-1.5 border-t border-dashed border-blue-500/30">
-                <div className="flex justify-between text-[8.5px] text-gray-400 mb-0.5">
-                  <span>Lebar Pita Lokal:</span>
-                  <span className="font-mono text-blue-400">{slitHConfig.width || 180}px</span>
-                </div>
-                <input
-                  type="range" min="60" max="500" value={slitHConfig.width || 180}
-                  onChange={(e) => setSlitHConfig(prev => ({ ...prev, width: Number(e.target.value) }))}
-                  className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-blue-400"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Kerapatan Irisan Garis (Multi-Stripe) */}
-          <div>
-            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              Kerapatan Irisan Garis:
-            </div>
-            <div className="grid grid-cols-4 gap-1">
-              {[
-                { f: 1, label: '1 Pita' },
-                { f: 2, label: '2 Garis' },
-                { f: 4, label: '4 Halus' },
-                { f: 8, label: 'Barcode' }
-              ].map(item => (
-                <button
-                  key={item.f}
-                  onClick={() => setSlitHConfig(prev => ({ ...prev, frequency: item.f }))}
-                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.frequency === item.f ? 'bg-blue-500 text-black border-blue-400 shadow-sm' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Opasitas Slit */}
-          <div>
-            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-              <span>Transparansi Slit:</span>
-              <span className="font-mono text-blue-400">{slitHConfig.opacity}%</span>
-            </div>
-            <input
-              type="range" min="20" max="100" value={slitHConfig.opacity}
-              onChange={(e) => setSlitHConfig(prev => ({ ...prev, opacity: Number(e.target.value) }))}
-              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-400"
-            />
-          </div>
-
-          {/* Toggles Panah & Label */}
-          <div className="flex space-x-1 pt-0.5">
-            <button
-              onClick={() => setSlitHConfig(prev => ({ ...prev, showArrow: !prev.showArrow }))}
-              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.showArrow ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : (isDarkMode ? 'bg-[#1f2533] border-[#2d3445] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
-            >
-              Panah →: {slitHConfig.showArrow ? 'ON' : 'OFF'}
-            </button>
-            <button
-              onClick={() => setSlitHConfig(prev => ({ ...prev, showLabel: !prev.showLabel }))}
-              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.showLabel ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : (isDarkMode ? 'bg-[#1f2533] border-[#2d3445] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
-            >
-              Label Teks: {slitHConfig.showLabel ? 'ON' : 'OFF'}
             </button>
           </div>
         </div>
@@ -1103,7 +1089,8 @@ export default function App() {
   const [gridCells, setGridCells] = useState([]); // Array objek sel
   const [selectedCellId, setSelectedCellId] = useState(null); // Sel terpilih di kanvas
   const [hoveredCellId, setHoveredCellId] = useState(null); // Sel hover di kanvas
-  const [manualBrushRole, setManualBrushRole] = useState('slit_v'); // 'slit_v', 'slit_h', 'card', 'intact', 'breakout'
+  const [manualBrushRole, setManualBrushRole] = useState('slit_scan'); // 'slit_scan', 'card', 'intact', 'breakout'
+  const [slitDirection, setSlitDirection] = useState('auto'); // 'auto' | 'v' | 'h'
   const [heroBreakoutThreshold, setHeroBreakoutThreshold] = useState(35); // 0 s/d 100%
   const [intactCellRatio, setIntactCellRatio] = useState(20); // 0 s/d 50%
   const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Panah ↓ / →
@@ -1962,36 +1949,44 @@ export default function App() {
       lastPaintedPosRef.current = { x: coords.x, y: coords.y };
 
       // Auto-arah Slit Scan: deteksi arah sapuan untuk pilih slit_v vs slit_h
-      // Jika user menyapukan kursor lebih horizontal → slit_h, vertikal → slit_v
-      let effectiveRole = manualBrushRole;
-      if ((manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && !isInitialClick && lastPos) {
-        const dx = Math.abs(coords.x - lastPos.x);
-        const dy = Math.abs(coords.y - lastPos.y);
-        if (dx > dy * 1.4) {
-          effectiveRole = 'slit_h'; // Gerak horizontal dominan
-        } else if (dy > dx * 1.4) {
-          effectiveRole = 'slit_v'; // Gerak vertikal dominan
+      let effectiveRole = 'slit_v';
+      if (slitDirection === 'v') {
+        effectiveRole = 'slit_v';
+      } else if (slitDirection === 'h') {
+        effectiveRole = 'slit_h';
+      } else {
+        // 'auto' mode: deteksi arah dari pergerakan sapuan (swipe)
+        if (!isInitialClick && lastPos) {
+          const dx = Math.abs(coords.x - lastPos.x);
+          const dy = Math.abs(coords.y - lastPos.y);
+          if (dx > dy * 1.25) {
+            effectiveRole = 'slit_h'; // Gerak horizontal dominan
+          } else if (dy > dx * 1.25) {
+            effectiveRole = 'slit_v'; // Gerak vertikal dominan
+          } else {
+            effectiveRole = (manualBrushRole === 'slit_h') ? 'slit_h' : 'slit_v';
+          }
         } else {
-          effectiveRole = manualBrushRole; // Tetap dengan pilihan saat ini
+          effectiveRole = (manualBrushRole === 'slit_h') ? 'slit_h' : 'slit_v';
         }
       }
 
-      if (effectiveRole === 'slit_v' || manualBrushRole === 'slit_scan_v') {
+      const isSlitRole = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
+
+      if (isSlitRole && effectiveRole === 'slit_v') {
         const w = Math.max(10, Math.min(250, slitVConfig.width));
         const reach = slitVConfig.reach;
-        // Stretch: stretchInt > 100 berarti ribbon lebih panjang dari kotak aslinya
-        const stretchMult = Math.max(0.4, stretchInt / 100);
+        // Stretch multiplier: stretchInt > 100 membuat ribbon memanjang bebas keluar kotak
+        const stretchMult = stretchInt <= 100 ? Math.max(0.4, stretchInt / 100) : (1 + ((stretchInt - 100) / 40) * 8);
         let elemX = Math.round(coords.x - w / 2);
-        // Boleh keluar batas scratch box (tidak di-clamp ke bounds)
 
         let elemY, elemH;
         if (reach === 'full') {
-          // stretchInt mempengaruhi panjang: >100% = melebihi canvas bound
-          const rawH = bounds.bH * stretchMult;
+          const rawH = bounds.bH * Math.min(3, Math.max(0.8, stretchInt / 100));
           elemH = Math.round(rawH);
           elemY = Math.round(bounds.bY + (bounds.bH - elemH) / 2);
         } else {
-          elemH = Math.round(Math.min(bounds.bH * stretchMult, (slitVConfig.height || 180) * stretchMult));
+          elemH = Math.round(Math.min(bounds.bH * 3, (slitVConfig.height || 180) * Math.max(0.4, stretchInt / 100)));
           elemH = Math.max(20, elemH);
           elemY = Math.round(coords.y - elemH / 2);
         }
@@ -2017,24 +2012,23 @@ export default function App() {
             showArrow: slitVConfig.showArrow,
             showLabel: slitVConfig.showLabel,
             isManualFreehand: true,
-            allowOverflow: true // flag: boleh keluar batas scratch box
+            allowOverflow: true // flag: bebas keluar dari batas kotak pembingkai scratch
           }
         ]);
 
-      } else if (effectiveRole === 'slit_h' || manualBrushRole === 'slit_scan_h') {
+      } else if (isSlitRole && effectiveRole === 'slit_h') {
         const h = Math.max(10, Math.min(250, slitHConfig.height));
         const reach = slitHConfig.reach;
-        const stretchMult = Math.max(0.4, stretchInt / 100);
+        const stretchMult = stretchInt <= 100 ? Math.max(0.4, stretchInt / 100) : (1 + ((stretchInt - 100) / 40) * 8);
         let elemY = Math.round(coords.y - h / 2);
-        // Boleh keluar batas scratch box
 
         let elemX, elemW;
         if (reach === 'full') {
-          const rawW = bounds.bW * stretchMult;
+          const rawW = bounds.bW * Math.min(3, Math.max(0.8, stretchInt / 100));
           elemW = Math.round(rawW);
           elemX = Math.round(bounds.bX + (bounds.bW - elemW) / 2);
         } else {
-          elemW = Math.round(Math.min(bounds.bW * stretchMult, (slitHConfig.width || 180) * stretchMult));
+          elemW = Math.round(Math.min(bounds.bW * 3, (slitHConfig.width || 180) * Math.max(0.4, stretchInt / 100)));
           elemW = Math.max(20, elemW);
           elemX = Math.round(coords.x - elemW / 2);
         }
@@ -2060,7 +2054,7 @@ export default function App() {
             showArrow: slitHConfig.showArrow,
             showLabel: slitHConfig.showLabel,
             isManualFreehand: true,
-            allowOverflow: true
+            allowOverflow: true // flag: bebas keluar dari batas kotak pembingkai scratch
           }
         ]);
 
@@ -2069,7 +2063,6 @@ export default function App() {
         const ch = Math.max(16, Math.min(200, cardConfig.height));
         const elemX = Math.round(coords.x - cw / 2);
         const elemY = Math.round(coords.y - ch / 2);
-        // Kartu bisa keluar batas scratch box
 
         const newId = `free_card_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
         const word = cardConfig.label || (aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'FIGURE');
@@ -2121,7 +2114,8 @@ export default function App() {
       const rect = canvas.getBoundingClientRect();
       const scaleFactor = canvas.width / Math.max(1, rect.width);
       let activeRadius = brushSize;
-      if (manualBrushRole === 'slit_v') activeRadius = slitVConfig.width;
+      const isSlit = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
+      if (manualBrushRole === 'slit_v' || manualBrushRole === 'slit_scan') activeRadius = slitVConfig.width;
       else if (manualBrushRole === 'slit_h') activeRadius = slitHConfig.height;
       else if (manualBrushRole === 'card') activeRadius = Math.max(cardConfig.width, cardConfig.height) / 2;
       else if (manualBrushRole === 'intact') activeRadius = intactConfig.radius;
@@ -2137,7 +2131,9 @@ export default function App() {
           const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
 
           if (distSq <= brushRadiusCanvas**2) {
-            if (manualBrushRole === 'slit_v') {
+            const bentoSlitMode = slitDirection === 'h' ? 'slit_h' : slitDirection === 'v' ? 'slit_v' : (c.w >= c.h ? 'slit_h' : 'slit_v');
+
+            if (isSlit && bentoSlitMode === 'slit_v') {
               const normY = Math.max(0.04, Math.min(0.96, (coords.y - c.y) / c.h));
               const cov = Math.min(100, Math.max(10, Math.round((slitVConfig.width / c.w) * 100)));
               hasChanges = true;
@@ -2149,9 +2145,10 @@ export default function App() {
                 slitFrequency: slitVConfig.frequency,
                 slitOpacity: slitVConfig.opacity,
                 showArrow: slitVConfig.showArrow,
-                showLabel: slitVConfig.showLabel
+                showLabel: slitVConfig.showLabel,
+                allowOverflow: true
               };
-            } else if (manualBrushRole === 'slit_h') {
+            } else if (isSlit && bentoSlitMode === 'slit_h') {
               const normX = Math.max(0.04, Math.min(0.96, (coords.x - c.x) / c.w));
               const cov = Math.min(100, Math.max(10, Math.round((slitHConfig.height / c.h) * 100)));
               hasChanges = true;
@@ -2163,7 +2160,8 @@ export default function App() {
                 slitFrequency: slitHConfig.frequency,
                 slitOpacity: slitHConfig.opacity,
                 showArrow: slitHConfig.showArrow,
-                showLabel: slitHConfig.showLabel
+                showLabel: slitHConfig.showLabel,
+                allowOverflow: true
               };
             } else if (manualBrushRole === 'card') {
               hasChanges = true;
@@ -2265,6 +2263,7 @@ export default function App() {
     if (isPaintingRef.current) {
       isPaintingRef.current = false;
       lastPaintedStrokeIdRef.current = null;
+      lastPaintedPosRef.current = null;
     }
     e.target.releasePointerCapture(e.pointerId);
   };
@@ -2283,7 +2282,7 @@ export default function App() {
     setDraggingGuide({ id: newId, type });
   };
 
-  const generateAutomaticGrid = useCallback((customSeed = seed) => {
+  const generateAutomaticGrid = useCallback((customSeed = seed, customComplexity = null) => {
     if (!image) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -2292,9 +2291,11 @@ export default function App() {
     if (!bounds) return;
     const { bX, bY, bW, bH } = bounds;
 
+    const activeComplexity = (customComplexity !== null && customComplexity !== undefined) ? customComplexity : complexity;
+
     const newCells = createGridCells({
       bX, bY, bW, bH,
-      complexity,
+      complexity: activeComplexity,
       gridPartitionStyle,
       boxSizeVariety,
       stretchBalance,
@@ -2447,15 +2448,16 @@ export default function App() {
         const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
         const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
-        // stretchInt: kontrol panjang ribbon (100% = normal, >100% = lebih panjang)
-        // allowOverflow cells = bisa melebihi batas; auto cells = dibatasi max 1.5x
-        const stretchMult = cell.allowOverflow
-          ? Math.max(0.4, stretchInt / 100)
-          : Math.min(1.5, Math.max(0.3, stretchInt / 100));
+        // stretchInt: kontrol panjang streak & overshoot (berkesinambungan seperti fungsi pertama kali)
+        const stretchMult = stretchInt <= 100
+          ? Math.max(0.1, stretchInt / 100)
+          : (1 + ((stretchInt - 100) / 40) * 8);
+
+        // Ke terkecualian: jika elemen freehand (allowOverflow) atau stretchInt > 100, bebas keluar dari kotak pembingkai scratch
+        const isExemptFromClip = cell.allowOverflow || stretchInt > 100;
 
         ctx.save();
-        // Hanya clip jika elemen tidak punya flag allowOverflow
-        if (!cell.allowOverflow) {
+        if (!isExemptFromClip) {
           ctx.beginPath();
           ctx.rect(cell.x, cell.y, cell.w, cell.h);
           ctx.clip();
@@ -2465,7 +2467,7 @@ export default function App() {
         ctx.drawImage(offscreen, cell.x, cell.y, cell.w, cell.h, cell.x, cell.y, cell.w, cell.h);
 
         ctx.globalAlpha = opac;
-        // totalRibbonH bisa melebihi cell.h jika stretchMult > 1
+        // totalRibbonH memanjang dramatis saat stretchInt tinggi (bebas keluar kotak)
         const totalRibbonH = Math.max(2, Math.floor(cell.h * cov * stretchMult));
         const bandH = Math.max(1, Math.floor(totalRibbonH / freq));
         const isGlitch = renderStyle === 'glitch';
@@ -2479,6 +2481,9 @@ export default function App() {
           let sampleY = Math.floor(cell.y + cell.h * sampleOffset);
           if (isLiquid) {
             sampleY += Math.sin((cell.x + f * 30) * 0.04) * (cell.h * 0.12);
+          }
+          if (brutalInt > 0 && !isGlitch) {
+            sampleY += Math.round(Math.sin(cell.x * 0.05 + f * 2) * (brutalInt / 100) * 15 * relScale);
           }
           sampleY = Math.max(bY, Math.min(bY + bH - 2, sampleY));
           const sliceH = Math.max(1, Math.floor(1 * relScale * 0.5));
@@ -2502,15 +2507,17 @@ export default function App() {
         const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
         const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
-        // stretchInt: kontrol lebar ribbon horizontal
-        // allowOverflow cells = bebas keluar batas; auto cells = dibatasi max 1.5x
-        const stretchMult = cell.allowOverflow
-          ? Math.max(0.4, stretchInt / 100)
-          : Math.min(1.5, Math.max(0.3, stretchInt / 100));
+
+        // stretchInt: kontrol lebar streak & overshoot horizontal
+        const stretchMult = stretchInt <= 100
+          ? Math.max(0.1, stretchInt / 100)
+          : (1 + ((stretchInt - 100) / 40) * 8);
+
+        // Ke terkecualian: bebas keluar dari kotak pembingkai scratch
+        const isExemptFromClip = cell.allowOverflow || stretchInt > 100;
 
         ctx.save();
-        // Hanya clip jika elemen tidak punya flag allowOverflow
-        if (!cell.allowOverflow) {
+        if (!isExemptFromClip) {
           ctx.beginPath();
           ctx.rect(cell.x, cell.y, cell.w, cell.h);
           ctx.clip();
@@ -2520,7 +2527,7 @@ export default function App() {
         ctx.drawImage(offscreen, cell.x, cell.y, cell.w, cell.h, cell.x, cell.y, cell.w, cell.h);
 
         ctx.globalAlpha = opac;
-        // totalRibbonW bisa melebihi cell.w jika stretchMult > 1
+        // totalRibbonW memanjang dramatis saat stretchInt tinggi (bebas keluar kotak)
         const totalRibbonW = Math.max(2, Math.floor(cell.w * cov * stretchMult));
         const bandW = Math.max(1, Math.floor(totalRibbonW / freq));
         const isGlitch = renderStyle === 'glitch';
@@ -2534,6 +2541,9 @@ export default function App() {
           let sampleX = Math.floor(cell.x + cell.w * sampleOffset);
           if (isLiquid) {
             sampleX += Math.sin((cell.y + f * 30) * 0.04) * (cell.w * 0.12);
+          }
+          if (brutalInt > 0 && !isGlitch) {
+            sampleX += Math.round(Math.sin(cell.y * 0.05 + f * 2) * (brutalInt / 100) * 15 * relScale);
           }
           sampleX = Math.max(bX, Math.min(bX + bW - 2, sampleX));
           const sliceW = Math.max(1, Math.floor(1 * relScale * 0.5));
@@ -3064,10 +3074,16 @@ export default function App() {
                       setManualPlacementMode={setManualPlacementMode}
                       manualBrushRole={manualBrushRole}
                       setManualBrushRole={setManualBrushRole}
+                      slitDirection={slitDirection}
+                      setSlitDirection={setSlitDirection}
                       slitVConfig={slitVConfig}
                       setSlitVConfig={setSlitVConfig}
                       slitHConfig={slitHConfig}
                       setSlitHConfig={setSlitHConfig}
+                      stretchInt={stretchInt}
+                      setStretchInt={setStretchInt}
+                      complexity={complexity}
+                      setComplexity={setComplexity}
                       cardConfig={cardConfig}
                       setCardConfig={setCardConfig}
                       intactConfig={intactConfig}
@@ -3423,9 +3439,14 @@ export default function App() {
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         setComplexity(val);
-                        // Langsung regenerasi grid di auto mode saat complexity berubah
-                        if (engineMode === 'auto') {
-                          setTimeout(() => generateAutomaticGrid(), 0);
+                        // Langsung regenerasi grid dengan nilai baru
+                        generateAutomaticGrid(seed, val);
+                        if (engineMode === 'manual') {
+                          const autoFreq = Math.max(1, Math.min(8, Math.round((val / 100) * 8)));
+                          setSlitFrequency(autoFreq);
+                          setSlitVConfig(prev => ({ ...prev, frequency: autoFreq }));
+                          setSlitHConfig(prev => ({ ...prev, frequency: autoFreq }));
+                          setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: autoFreq } : c));
                         }
                       }} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
@@ -3436,13 +3457,18 @@ export default function App() {
                   <div>
                     <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                       <span>Stretch Intensity (Panjang Streak &amp; Blend)</span>
-                      <span className="text-cyan-400 font-mono text-[11px]">{stretchInt}%</span>
+                      <span className="text-cyan-400 font-mono text-[11px] font-bold">{stretchInt}%</span>
                     </div>
                     <input 
-                      type="range" min="10" max="200" value={stretchInt} 
+                      type="range" min="10" max="250" value={stretchInt} 
                       onChange={(e) => setStretchInt(Number(e.target.value))} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                     />
+                    <div className="flex justify-between text-[8.5px] text-gray-500 mt-1 font-mono">
+                      <span>50% (Kompak)</span>
+                      <span>100% (Normal)</span>
+                      <span className="text-cyan-400 font-bold">&gt;120% (Bebas Keluar Kotak 🚀)</span>
+                    </div>
                   </div>
 
                   {/* Ukuran / Cakupan Pita Slit */}
@@ -3514,7 +3540,7 @@ export default function App() {
                   {/* Brutal Distortion */}
                   <div>
                     <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      <span>Brutal Distortion & Glitch Shift</span>
+                      <span>Brutal Distortion &amp; Glitch Shift</span>
                       <span className="text-red-400 font-mono text-[11px]">{brutalInt}%</span>
                     </div>
                     <input 
@@ -3530,27 +3556,39 @@ export default function App() {
                     <div className="flex space-x-1">
                       <button 
                         onClick={() => {
-                          const nextX = !stretchDirX;
+                          let nextX = !stretchDirX;
+                          let nextY = stretchDirY;
+                          if (!nextX && !nextY) nextY = true;
                           setStretchDirX(nextX);
-                          if (!nextX && stretchDirY) {
-                            setGridCells(prev => prev.map(c => c.mode === 'slit_h' ? { ...c, mode: 'slit_v' } : c));
-                          }
+                          setStretchDirY(nextY);
+                          setGridCells(prev => prev.map(c => {
+                            if (c.mode !== 'slit_v' && c.mode !== 'slit_h') return c;
+                            if (nextX && !nextY) return { ...c, mode: 'slit_h' };
+                            if (!nextX && nextY) return { ...c, mode: 'slit_v' };
+                            return { ...c, mode: (c.w >= c.h) ? 'slit_h' : 'slit_v' };
+                          }));
                         }}
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${stretchDirX ? 'bg-cyan-500 text-black' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${stretchDirX ? 'bg-cyan-500 text-black shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
                       >
-                        Horizontal →
+                        Horizontal → {stretchDirX ? '✓' : ''}
                       </button>
                       <button 
                         onClick={() => {
-                          const nextY = !stretchDirY;
+                          let nextY = !stretchDirY;
+                          let nextX = stretchDirX;
+                          if (!nextX && !nextY) nextX = true;
+                          setStretchDirX(nextX);
                           setStretchDirY(nextY);
-                          if (!nextY && stretchDirX) {
-                            setGridCells(prev => prev.map(c => c.mode === 'slit_v' ? { ...c, mode: 'slit_h' } : c));
-                          }
+                          setGridCells(prev => prev.map(c => {
+                            if (c.mode !== 'slit_v' && c.mode !== 'slit_h') return c;
+                            if (!nextX && nextY) return { ...c, mode: 'slit_v' };
+                            if (nextX && !nextY) return { ...c, mode: 'slit_h' };
+                            return { ...c, mode: (c.w >= c.h) ? 'slit_h' : 'slit_v' };
+                          }));
                         }}
-                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${stretchDirY ? 'bg-cyan-500 text-black' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${stretchDirY ? 'bg-cyan-500 text-black shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
                       >
-                        Vertical ↓
+                        Vertical ↓ {stretchDirY ? '✓' : ''}
                       </button>
                     </div>
                   </div>
@@ -3565,7 +3603,14 @@ export default function App() {
                     </div>
                     <input 
                       type="range" min="0" max="100" value={stretchBalance} 
-                      onChange={(e) => setStretchBalance(Number(e.target.value))} 
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setStretchBalance(val);
+                        setGridCells(prev => prev.map((c, idx) => {
+                          if (c.mode !== 'slit_v' && c.mode !== 'slit_h') return c;
+                          return { ...c, mode: ((idx * 37) % 100 < val) ? 'slit_h' : 'slit_v' };
+                        }));
+                      }} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                     />
                     <div className="flex justify-between text-[9px] text-gray-500 mt-1 font-mono">
@@ -3631,10 +3676,16 @@ export default function App() {
                       setManualPlacementMode={setManualPlacementMode}
                       manualBrushRole={manualBrushRole}
                       setManualBrushRole={setManualBrushRole}
+                      slitDirection={slitDirection}
+                      setSlitDirection={setSlitDirection}
                       slitVConfig={slitVConfig}
                       setSlitVConfig={setSlitVConfig}
                       slitHConfig={slitHConfig}
                       setSlitHConfig={setSlitHConfig}
+                      stretchInt={stretchInt}
+                      setStretchInt={setStretchInt}
+                      complexity={complexity}
+                      setComplexity={setComplexity}
                       cardConfig={cardConfig}
                       setCardConfig={setCardConfig}
                       intactConfig={intactConfig}
@@ -4085,7 +4136,10 @@ export default function App() {
               const screenScale = (canvas && bounds?.canvasW) ? (canvas.getBoundingClientRect().width / bounds.canvasW) : viewScale;
 
               if (engineMode === 'manual' && manualPlacementMode === 'freehand') {
-                if (manualBrushRole === 'slit_v') {
+                const isSlit = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
+                const isHoriz = slitDirection === 'h' || (manualBrushRole === 'slit_h' && slitDirection !== 'v');
+
+                if (isSlit && !isHoriz) {
                   const w = Math.max(8, Math.round(slitVConfig.width * screenScale));
                   const h = Math.max(16, Math.round((slitVConfig.reach === 'full' ? (bounds?.bH || 600) : (slitVConfig.height || 180)) * screenScale));
                   return (
@@ -4120,7 +4174,7 @@ export default function App() {
                       </span>
                     </div>
                   );
-                } else if (manualBrushRole === 'slit_h') {
+                } else if (isSlit && isHoriz) {
                   const w = Math.max(16, Math.round((slitHConfig.reach === 'full' ? (bounds?.bW || 600) : (slitHConfig.width || 180)) * screenScale));
                   const h = Math.max(8, Math.round(slitHConfig.height * screenScale));
                   return (
@@ -4246,7 +4300,11 @@ export default function App() {
               let bgColor = 'rgba(6, 182, 212, 0.12)';
 
               if (engineMode === 'manual') {
-                if (manualBrushRole === 'slit_v') {
+                if (manualBrushRole === 'slit_scan') {
+                  const isHoriz = slitDirection === 'h';
+                  d = isHoriz ? slitHConfig.height : slitVConfig.width;
+                  label = isHoriz ? `→ ${d}px` : `↓ ${d}px`;
+                } else if (manualBrushRole === 'slit_v') {
                   d = slitVConfig.width;
                   label = `↓ ${d}px`;
                 } else if (manualBrushRole === 'slit_h') {
