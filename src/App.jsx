@@ -391,18 +391,12 @@ function ManualDedicatedControls({
         <div className="grid grid-cols-2 gap-1.5">
           {[
             {
-              role: 'slit_v',
-              label: '↓ Slit Vertikal',
-              sizeStr: `${slitVConfig.width}px`,
-              desc: 'Pita vertikal presisi',
-              color: 'text-cyan-400 border-cyan-500/50 bg-cyan-500/10 ring-cyan-400'
-            },
-            {
-              role: 'slit_h',
-              label: '→ Slit Horizontal',
-              sizeStr: `${slitHConfig.height}px`,
-              desc: 'Pita horizontal presisi',
-              color: 'text-blue-400 border-blue-500/50 bg-blue-500/10 ring-blue-400'
+              role: 'slit_scan',
+              label: '🌊 Slit Scan',
+              sizeStr: `V:${slitVConfig.width}px / H:${slitHConfig.height}px`,
+              desc: 'Auto-arah: sapuan ↕ = vertikal, ↔ = horizontal',
+              color: 'text-cyan-400 border-cyan-500/50 bg-cyan-500/10 ring-cyan-400',
+              colSpan: true
             },
             {
               role: 'card',
@@ -429,11 +423,15 @@ function ManualDedicatedControls({
             <button
               key={item.role}
               onClick={() => {
-                setManualBrushRole(item.role);
+                setManualBrushRole(item.role === 'slit_scan' ? 'slit_v' : item.role);
                 setActiveTool('brush');
                 showToast(`Peran Kuas: ${item.label}`);
               }}
-              className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${manualBrushRole === item.role ? `${item.color} font-bold ring-1 shadow-sm` : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
+              className={`${item.colSpan ? 'col-span-2' : ''} p-2 text-left rounded-lg border transition-all cursor-pointer ${
+                (item.role === 'slit_scan' ? (manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') : manualBrushRole === item.role)
+                  ? `${item.color} font-bold ring-1 shadow-sm`
+                  : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold">{item.label}</span>
@@ -448,7 +446,7 @@ function ManualDedicatedControls({
       {/* 3. Panel Konfigurasi Khusus Per Peran Kuas (DEDICATED CONTROLS) */}
 
       {/* A. DEDICATED SLIT VERTICAL CONTROLS */}
-      {manualBrushRole === 'slit_v' && (
+      {(manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && (
         <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161b22] border-cyan-500/40' : 'bg-cyan-50/60 border-cyan-300'}`}>
           <div className="flex items-center justify-between">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-cyan-400' : 'text-cyan-800'}`}>
@@ -578,7 +576,7 @@ function ManualDedicatedControls({
       )}
 
       {/* B. DEDICATED SLIT HORIZONTAL CONTROLS */}
-      {manualBrushRole === 'slit_h' && (
+      {(manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && (
         <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161c28] border-blue-500/40' : 'bg-blue-50/60 border-blue-300'}`}>
           <div className="flex items-center justify-between">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-blue-400' : 'text-blue-800'}`}>
@@ -1154,6 +1152,7 @@ export default function App() {
   // Mode Penempatan Manual: 'freehand' (tambah pita/kartu presisi langsung di kursor) vs 'bento' (ubah sel kisi bento)
   const [manualPlacementMode, setManualPlacementMode] = useState('freehand'); // 'freehand' | 'bento'
   const lastPaintedStrokeIdRef = useRef(null);
+  const lastPaintedPosRef = useRef(null); // {x, y} posisi terakhir elemen di-stamp saat drag-paint
 
   // Mask & Mode Reset Handlers (Mencegah Blank Screen & Pembersihan Fleksibel)
   const clearToCleanSlate = () => {
@@ -1946,143 +1945,154 @@ export default function App() {
 
     if (manualPlacementMode === 'freehand') {
       // --- PENEMPATAN ELEMEN PRESISI (FREEHAND MODE) ---
-      if (manualBrushRole === 'slit_v') {
+      // Swipe-paint mode: stamp elemen baru setiap >=STAMP_THRESHOLD px pergerakan
+      // Kecuali initial click → selalu stamp
+      const STAMP_THRESHOLD = 18; // piksel jarak minimum antar-stamp saat menyapu
+
+      // Cek apakah sudah bergerak cukup jauh dari posisi stamp terakhir
+      const lastPos = lastPaintedPosRef.current;
+      if (!isInitialClick && lastPos) {
+        const dx = coords.x - lastPos.x;
+        const dy = coords.y - lastPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < STAMP_THRESHOLD) return; // belum cukup jauh, jangan stamp
+      }
+
+      // Update posisi stamp terakhir
+      lastPaintedPosRef.current = { x: coords.x, y: coords.y };
+
+      // Auto-arah Slit Scan: deteksi arah sapuan untuk pilih slit_v vs slit_h
+      // Jika user menyapukan kursor lebih horizontal → slit_h, vertikal → slit_v
+      let effectiveRole = manualBrushRole;
+      if ((manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h') && !isInitialClick && lastPos) {
+        const dx = Math.abs(coords.x - lastPos.x);
+        const dy = Math.abs(coords.y - lastPos.y);
+        if (dx > dy * 1.4) {
+          effectiveRole = 'slit_h'; // Gerak horizontal dominan
+        } else if (dy > dx * 1.4) {
+          effectiveRole = 'slit_v'; // Gerak vertikal dominan
+        } else {
+          effectiveRole = manualBrushRole; // Tetap dengan pilihan saat ini
+        }
+      }
+
+      if (effectiveRole === 'slit_v' || manualBrushRole === 'slit_scan_v') {
         const w = Math.max(10, Math.min(250, slitVConfig.width));
         const reach = slitVConfig.reach;
+        // Stretch: stretchInt > 100 berarti ribbon lebih panjang dari kotak aslinya
+        const stretchMult = Math.max(0.4, stretchInt / 100);
         let elemX = Math.round(coords.x - w / 2);
-        elemX = Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - w, elemX));
+        // Boleh keluar batas scratch box (tidak di-clamp ke bounds)
 
         let elemY, elemH;
         if (reach === 'full') {
-          elemY = bounds.bY;
-          elemH = bounds.bH;
+          // stretchInt mempengaruhi panjang: >100% = melebihi canvas bound
+          const rawH = bounds.bH * stretchMult;
+          elemH = Math.round(rawH);
+          elemY = Math.round(bounds.bY + (bounds.bH - elemH) / 2);
         } else {
-          elemH = Math.min(bounds.bH, slitVConfig.height || 180);
-          elemY = Math.round(Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - elemH, coords.y - elemH / 2)));
+          elemH = Math.round(Math.min(bounds.bH * stretchMult, (slitVConfig.height || 180) * stretchMult));
+          elemH = Math.max(20, elemH);
+          elemY = Math.round(coords.y - elemH / 2);
         }
 
         const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.y - elemY) / Math.max(1, elemH)));
-
-        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
-          const newId = `free_v_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-          lastPaintedStrokeIdRef.current = newId;
-          const word = aiWords[gridCells.length % (aiWords.length || 1)] || 'SPECIMEN';
-          setGridCells(prev => [
-            ...prev,
-            {
-              id: newId,
-              mode: 'slit_v',
-              x: elemX,
-              y: elemY,
-              w: w,
-              h: elemH,
-              num: prev.length + 1,
-              word: slitVConfig.showLabel ? word : '',
-              sampleOffset,
-              slitCoverage: 100,
-              slitFrequency: slitVConfig.frequency,
-              slitOpacity: slitVConfig.opacity,
-              showArrow: slitVConfig.showArrow,
-              showLabel: slitVConfig.showLabel,
-              isManualFreehand: true
-            }
-          ]);
-        } else {
-          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
-            ...c,
+        const newId = `free_v_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+        const word = aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'SPECIMEN';
+        setGridCells(prev => [
+          ...prev,
+          {
+            id: newId,
+            mode: 'slit_v',
             x: elemX,
             y: elemY,
             w: w,
             h: elemH,
-            sampleOffset
-          } : c));
-        }
-      } else if (manualBrushRole === 'slit_h') {
+            num: prev.length + 1,
+            word: slitVConfig.showLabel ? word : '',
+            sampleOffset,
+            slitCoverage: 100,
+            slitFrequency: slitVConfig.frequency,
+            slitOpacity: slitVConfig.opacity,
+            showArrow: slitVConfig.showArrow,
+            showLabel: slitVConfig.showLabel,
+            isManualFreehand: true,
+            allowOverflow: true // flag: boleh keluar batas scratch box
+          }
+        ]);
+
+      } else if (effectiveRole === 'slit_h' || manualBrushRole === 'slit_scan_h') {
         const h = Math.max(10, Math.min(250, slitHConfig.height));
         const reach = slitHConfig.reach;
+        const stretchMult = Math.max(0.4, stretchInt / 100);
         let elemY = Math.round(coords.y - h / 2);
-        elemY = Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - h, elemY));
+        // Boleh keluar batas scratch box
 
         let elemX, elemW;
         if (reach === 'full') {
-          elemX = bounds.bX;
-          elemW = bounds.bW;
+          const rawW = bounds.bW * stretchMult;
+          elemW = Math.round(rawW);
+          elemX = Math.round(bounds.bX + (bounds.bW - elemW) / 2);
         } else {
-          elemW = Math.min(bounds.bW, slitHConfig.width || 180);
-          elemX = Math.round(Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - elemW, coords.x - elemW / 2)));
+          elemW = Math.round(Math.min(bounds.bW * stretchMult, (slitHConfig.width || 180) * stretchMult));
+          elemW = Math.max(20, elemW);
+          elemX = Math.round(coords.x - elemW / 2);
         }
 
         const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.x - elemX) / Math.max(1, elemW)));
-
-        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
-          const newId = `free_h_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-          lastPaintedStrokeIdRef.current = newId;
-          const word = aiWords[gridCells.length % (aiWords.length || 1)] || 'SPECIMEN';
-          setGridCells(prev => [
-            ...prev,
-            {
-              id: newId,
-              mode: 'slit_h',
-              x: elemX,
-              y: elemY,
-              w: elemW,
-              h: h,
-              num: prev.length + 1,
-              word: slitHConfig.showLabel ? word : '',
-              sampleOffset,
-              slitCoverage: 100,
-              slitFrequency: slitHConfig.frequency,
-              slitOpacity: slitHConfig.opacity,
-              showArrow: slitHConfig.showArrow,
-              showLabel: slitHConfig.showLabel,
-              isManualFreehand: true
-            }
-          ]);
-        } else {
-          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
-            ...c,
+        const newId = `free_h_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+        const word = aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'SPECIMEN';
+        setGridCells(prev => [
+          ...prev,
+          {
+            id: newId,
+            mode: 'slit_h',
             x: elemX,
             y: elemY,
             w: elemW,
             h: h,
-            sampleOffset
-          } : c));
-        }
+            num: prev.length + 1,
+            word: slitHConfig.showLabel ? word : '',
+            sampleOffset,
+            slitCoverage: 100,
+            slitFrequency: slitHConfig.frequency,
+            slitOpacity: slitHConfig.opacity,
+            showArrow: slitHConfig.showArrow,
+            showLabel: slitHConfig.showLabel,
+            isManualFreehand: true,
+            allowOverflow: true
+          }
+        ]);
+
       } else if (manualBrushRole === 'card') {
         const cw = Math.max(20, Math.min(350, cardConfig.width));
         const ch = Math.max(16, Math.min(200, cardConfig.height));
-        const elemX = Math.round(Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - cw, coords.x - cw / 2)));
-        const elemY = Math.round(Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - ch, coords.y - ch / 2)));
+        const elemX = Math.round(coords.x - cw / 2);
+        const elemY = Math.round(coords.y - ch / 2);
+        // Kartu bisa keluar batas scratch box
 
-        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
-          const newId = `free_card_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-          lastPaintedStrokeIdRef.current = newId;
-          const word = cardConfig.label || aiWords[gridCells.length % (aiWords.length || 1)] || 'FIGURE';
-          setGridCells(prev => [
-            ...prev,
-            {
-              id: newId,
-              mode: 'card',
-              x: elemX,
-              y: elemY,
-              w: cw,
-              h: ch,
-              num: prev.length + 1,
-              word: cardConfig.showLabel ? word : '',
-              cardColor: cardConfig.color,
-              cutoutCardOpacity: cardConfig.opacity,
-              showNum: cardConfig.showNum,
-              showLabel: cardConfig.showLabel,
-              isManualFreehand: true
-            }
-          ]);
-        } else {
-          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
-            ...c,
+        const newId = `free_card_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+        const word = cardConfig.label || (aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'FIGURE');
+        setGridCells(prev => [
+          ...prev,
+          {
+            id: newId,
+            mode: 'card',
             x: elemX,
-            y: elemY
-          } : c));
-        }
+            y: elemY,
+            w: cw,
+            h: ch,
+            num: prev.length + 1,
+            word: cardConfig.showLabel ? word : '',
+            cardColor: cardConfig.color,
+            cutoutCardOpacity: cardConfig.opacity,
+            showNum: cardConfig.showNum,
+            showLabel: cardConfig.showLabel,
+            isManualFreehand: true,
+            allowOverflow: true
+          }
+        ]);
+
       } else if (manualBrushRole === 'breakout' || manualBrushRole === 'intact') {
         const radius = manualBrushRole === 'breakout' ? breakoutConfig.radius : intactConfig.radius;
         const rect = canvas.getBoundingClientRect();
@@ -2192,6 +2202,7 @@ export default function App() {
       }
       isPaintingRef.current = true;
       lastPaintedStrokeIdRef.current = null;
+      lastPaintedPosRef.current = null;
       e.target.setPointerCapture(e.pointerId);
       applyBrushAtPoint(e, true);
     } else if (engineMode === 'manual') {
@@ -2436,17 +2447,26 @@ export default function App() {
         const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
         const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
+        // stretchInt: kontrol panjang ribbon (100% = normal, >100% = lebih panjang)
+        // allowOverflow cells = bisa melebihi batas; auto cells = dibatasi max 1.5x
+        const stretchMult = cell.allowOverflow
+          ? Math.max(0.4, stretchInt / 100)
+          : Math.min(1.5, Math.max(0.3, stretchInt / 100));
 
         ctx.save();
-        ctx.beginPath();
-        ctx.rect(cell.x, cell.y, cell.w, cell.h);
-        ctx.clip();
+        // Hanya clip jika elemen tidak punya flag allowOverflow
+        if (!cell.allowOverflow) {
+          ctx.beginPath();
+          ctx.rect(cell.x, cell.y, cell.w, cell.h);
+          ctx.clip();
+        }
 
         // Gambar foto utuh di bawahnya terlebih dahulu agar teks/objek tidak tertutup total
         ctx.drawImage(offscreen, cell.x, cell.y, cell.w, cell.h, cell.x, cell.y, cell.w, cell.h);
 
         ctx.globalAlpha = opac;
-        const totalRibbonH = Math.max(2, Math.floor(cell.h * cov));
+        // totalRibbonH bisa melebihi cell.h jika stretchMult > 1
+        const totalRibbonH = Math.max(2, Math.floor(cell.h * cov * stretchMult));
         const bandH = Math.max(1, Math.floor(totalRibbonH / freq));
         const isGlitch = renderStyle === 'glitch';
         const isLiquid = renderStyle === 'liquid';
@@ -2482,17 +2502,26 @@ export default function App() {
         const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
         const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
+        // stretchInt: kontrol lebar ribbon horizontal
+        // allowOverflow cells = bebas keluar batas; auto cells = dibatasi max 1.5x
+        const stretchMult = cell.allowOverflow
+          ? Math.max(0.4, stretchInt / 100)
+          : Math.min(1.5, Math.max(0.3, stretchInt / 100));
 
         ctx.save();
-        ctx.beginPath();
-        ctx.rect(cell.x, cell.y, cell.w, cell.h);
-        ctx.clip();
+        // Hanya clip jika elemen tidak punya flag allowOverflow
+        if (!cell.allowOverflow) {
+          ctx.beginPath();
+          ctx.rect(cell.x, cell.y, cell.w, cell.h);
+          ctx.clip();
+        }
 
         // Gambar foto utuh di bawahnya terlebih dahulu
         ctx.drawImage(offscreen, cell.x, cell.y, cell.w, cell.h, cell.x, cell.y, cell.w, cell.h);
 
         ctx.globalAlpha = opac;
-        const totalRibbonW = Math.max(2, Math.floor(cell.w * cov));
+        // totalRibbonW bisa melebihi cell.w jika stretchMult > 1
+        const totalRibbonW = Math.max(2, Math.floor(cell.w * cov * stretchMult));
         const bandW = Math.max(1, Math.floor(totalRibbonW / freq));
         const isGlitch = renderStyle === 'glitch';
         const isLiquid = renderStyle === 'liquid';
@@ -3391,7 +3420,14 @@ export default function App() {
                     </div>
                     <input 
                       type="range" min="10" max="100" value={complexity} 
-                      onChange={(e) => setComplexity(Number(e.target.value))} 
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setComplexity(val);
+                        // Langsung regenerasi grid di auto mode saat complexity berubah
+                        if (engineMode === 'auto') {
+                          setTimeout(() => generateAutomaticGrid(), 0);
+                        }
+                      }} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
                     />
                   </div>
@@ -3399,11 +3435,11 @@ export default function App() {
                   {/* Stretch Intensity */}
                   <div>
                     <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      <span>Stretch Intensity (Panjang Streak & Blend)</span>
+                      <span>Stretch Intensity (Panjang Streak &amp; Blend)</span>
                       <span className="text-cyan-400 font-mono text-[11px]">{stretchInt}%</span>
                     </div>
                     <input 
-                      type="range" min="10" max="150" value={stretchInt} 
+                      type="range" min="10" max="200" value={stretchInt} 
                       onChange={(e) => setStretchInt(Number(e.target.value))} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                     />
