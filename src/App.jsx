@@ -1923,269 +1923,63 @@ export default function App() {
   };
 
   const applyBrushAtPoint = (e, isInitialClick = false) => {
-    const coords = getCanvasCoords(e.clientX, e.clientY);
-    if (!coords) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const bounds = getImageAndGridBounds();
-    if (!bounds) return;
-
-    if (manualPlacementMode === 'freehand') {
-      // --- PENEMPATAN ELEMEN PRESISI (FREEHAND MODE) ---
-      // Swipe-paint mode: stamp elemen baru setiap >=STAMP_THRESHOLD px pergerakan
-      // Kecuali initial click → selalu stamp
-      const STAMP_THRESHOLD = 18; // piksel jarak minimum antar-stamp saat menyapu
-
-      // Cek apakah sudah bergerak cukup jauh dari posisi stamp terakhir
+    const rect = canvas.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+    const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+    
+    let effectiveRole = manualBrushRole;
+    if (manualBrushRole === 'slit_scan') {
+      effectiveRole = slitDirection === 'h' ? 'slit_h' : 'slit_v';
       const lastPos = lastPaintedPosRef.current;
-      if (!isInitialClick && lastPos) {
-        const dx = coords.x - lastPos.x;
-        const dy = coords.y - lastPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < STAMP_THRESHOLD) return; // belum cukup jauh, jangan stamp
-      }
-
-      // Update posisi stamp terakhir
-      lastPaintedPosRef.current = { x: coords.x, y: coords.y };
-
-      // Auto-arah Slit Scan: deteksi arah sapuan untuk pilih slit_v vs slit_h
-      let effectiveRole = 'slit_v';
-      if (slitDirection === 'v') {
-        effectiveRole = 'slit_v';
-      } else if (slitDirection === 'h') {
-        effectiveRole = 'slit_h';
-      } else {
-        // 'auto' mode: deteksi arah dari pergerakan sapuan (swipe)
-        if (!isInitialClick && lastPos) {
+      if (!isInitialClick && lastPos && slitDirection === 'auto') {
+        const coords = getCanvasCoords(e.clientX, e.clientY);
+        if (coords) {
           const dx = Math.abs(coords.x - lastPos.x);
           const dy = Math.abs(coords.y - lastPos.y);
-          if (dx > dy * 1.25) {
-            effectiveRole = 'slit_h'; // Gerak horizontal dominan
-          } else if (dy > dx * 1.25) {
-            effectiveRole = 'slit_v'; // Gerak vertikal dominan
-          } else {
-            effectiveRole = (manualBrushRole === 'slit_h') ? 'slit_h' : 'slit_v';
-          }
-        } else {
-          effectiveRole = (manualBrushRole === 'slit_h') ? 'slit_h' : 'slit_v';
+          if (dx > dy * 1.25) effectiveRole = 'slit_h';
+          else if (dy > dx * 1.25) effectiveRole = 'slit_v';
         }
       }
+    }
 
-      const isSlitRole = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
+    const coords = getCanvasCoords(e.clientX, e.clientY);
+    if (coords) {
+      lastPaintedPosRef.current = { x: coords.x, y: coords.y };
+    }
 
-      if (isSlitRole && effectiveRole === 'slit_v') {
-        const w = Math.max(10, Math.min(250, slitVConfig.width));
-        const reach = slitVConfig.reach;
-        // Stretch multiplier: stretchInt > 100 membuat ribbon memanjang bebas keluar kotak
-        const stretchMult = stretchInt <= 100 ? Math.max(0.4, stretchInt / 100) : (1 + ((stretchInt - 100) / 40) * 8);
-        let elemX = Math.round(coords.x - w / 2);
+    stretchMaskPointsRef.current.push({
+      nx, ny,
+      radius: brushSize,
+      role: effectiveRole,
+      direction: slitDirection,
+      slitVConfig: { ...slitVConfig },
+      slitHConfig: { ...slitHConfig },
+      cardConfig: { ...cardConfig },
+      breakoutConfig: { ...breakoutConfig },
+      intactConfig: { ...intactConfig },
+      stretchInt: stretchInt
+    });
 
-        let elemY, elemH;
-        if (reach === 'full') {
-          const rawH = bounds.bH * Math.min(3, Math.max(0.8, stretchInt / 100));
-          elemH = Math.round(rawH);
-          elemY = Math.round(bounds.bY + (bounds.bH - elemH) / 2);
-        } else {
-          elemH = Math.round(Math.min(bounds.bH * 3, (slitVConfig.height || 180) * Math.max(0.4, stretchInt / 100)));
-          elemH = Math.max(20, elemH);
-          elemY = Math.round(coords.y - elemH / 2);
-        }
-
-        const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.y - elemY) / Math.max(1, elemH)));
-        const newId = `free_v_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-        const word = aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'SPECIMEN';
-        setGridCells(prev => [
-          ...prev,
-          {
-            id: newId,
-            mode: 'slit_v',
-            x: elemX,
-            y: elemY,
-            w: w,
-            h: elemH,
-            num: prev.length + 1,
-            word: slitVConfig.showLabel ? word : '',
-            sampleOffset,
-            slitCoverage: 100,
-            slitFrequency: slitVConfig.frequency,
-            slitOpacity: slitVConfig.opacity,
-            showArrow: slitVConfig.showArrow,
-            showLabel: slitVConfig.showLabel,
-            isManualFreehand: true,
-            allowOverflow: true // flag: bebas keluar dari batas kotak pembingkai scratch
-          }
-        ]);
-
-      } else if (isSlitRole && effectiveRole === 'slit_h') {
-        const h = Math.max(10, Math.min(250, slitHConfig.height));
-        const reach = slitHConfig.reach;
-        const stretchMult = stretchInt <= 100 ? Math.max(0.4, stretchInt / 100) : (1 + ((stretchInt - 100) / 40) * 8);
-        let elemY = Math.round(coords.y - h / 2);
-
-        let elemX, elemW;
-        if (reach === 'full') {
-          const rawW = bounds.bW * Math.min(3, Math.max(0.8, stretchInt / 100));
-          elemW = Math.round(rawW);
-          elemX = Math.round(bounds.bX + (bounds.bW - elemW) / 2);
-        } else {
-          elemW = Math.round(Math.min(bounds.bW * 3, (slitHConfig.width || 180) * Math.max(0.4, stretchInt / 100)));
-          elemW = Math.max(20, elemW);
-          elemX = Math.round(coords.x - elemW / 2);
-        }
-
-        const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.x - elemX) / Math.max(1, elemW)));
-        const newId = `free_h_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-        const word = aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'SPECIMEN';
-        setGridCells(prev => [
-          ...prev,
-          {
-            id: newId,
-            mode: 'slit_h',
-            x: elemX,
-            y: elemY,
-            w: elemW,
-            h: h,
-            num: prev.length + 1,
-            word: slitHConfig.showLabel ? word : '',
-            sampleOffset,
-            slitCoverage: 100,
-            slitFrequency: slitHConfig.frequency,
-            slitOpacity: slitHConfig.opacity,
-            showArrow: slitHConfig.showArrow,
-            showLabel: slitHConfig.showLabel,
-            isManualFreehand: true,
-            allowOverflow: true // flag: bebas keluar dari batas kotak pembingkai scratch
-          }
-        ]);
-
-      } else if (manualBrushRole === 'card') {
-        const cw = Math.max(20, Math.min(350, cardConfig.width));
-        const ch = Math.max(16, Math.min(200, cardConfig.height));
-        const elemX = Math.round(coords.x - cw / 2);
-        const elemY = Math.round(coords.y - ch / 2);
-
-        const newId = `free_card_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-        const word = cardConfig.label || (aiWords && aiWords.length > 0 ? aiWords[gridCells.length % aiWords.length] : 'FIGURE');
-        setGridCells(prev => [
-          ...prev,
-          {
-            id: newId,
-            mode: 'card',
-            x: elemX,
-            y: elemY,
-            w: cw,
-            h: ch,
-            num: prev.length + 1,
-            word: cardConfig.showLabel ? word : '',
-            cardColor: cardConfig.color,
-            cutoutCardOpacity: cardConfig.opacity,
-            showNum: cardConfig.showNum,
-            showLabel: cardConfig.showLabel,
-            isManualFreehand: true,
-            allowOverflow: true
-          }
-        ]);
-
-      } else if (manualBrushRole === 'breakout' || manualBrushRole === 'intact') {
-        const radius = manualBrushRole === 'breakout' ? breakoutConfig.radius : intactConfig.radius;
-        const rect = canvas.getBoundingClientRect();
-        const scaleFactor = canvas.width / Math.max(1, rect.width);
-        const rCanvas = radius * scaleFactor;
-
-        setGridCells(prev => prev.filter(c => {
-          if (!c.isManualFreehand) return true;
-          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
-          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
-          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
-          return distSq > rCanvas**2;
-        }).map(c => {
-          if (c.isManualFreehand) return c;
-          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
-          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
-          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
-          if (distSq <= rCanvas**2) {
-            return { ...c, mode: manualBrushRole };
-          }
-          return c;
-        }));
-      }
-    } else {
-      // --- MANIPULASI SEL KISI BENTO (BENTO GRID MODE) ---
-      const rect = canvas.getBoundingClientRect();
-      const scaleFactor = canvas.width / Math.max(1, rect.width);
-      let activeRadius = brushSize;
-      const isSlit = manualBrushRole === 'slit_scan' || manualBrushRole === 'slit_v' || manualBrushRole === 'slit_h';
-      if (manualBrushRole === 'slit_v' || manualBrushRole === 'slit_scan') activeRadius = slitVConfig.width;
-      else if (manualBrushRole === 'slit_h') activeRadius = slitHConfig.height;
-      else if (manualBrushRole === 'card') activeRadius = Math.max(cardConfig.width, cardConfig.height) / 2;
-      else if (manualBrushRole === 'intact') activeRadius = intactConfig.radius;
-      else if (manualBrushRole === 'breakout') activeRadius = breakoutConfig.radius;
-      
-      const brushRadiusCanvas = (activeRadius / 2) * scaleFactor;
-
-      setGridCells(prev => {
-        let hasChanges = false;
-        const updated = prev.map(c => {
-          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
-          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
-          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
-
-          if (distSq <= brushRadiusCanvas**2) {
-            const bentoSlitMode = slitDirection === 'h' ? 'slit_h' : slitDirection === 'v' ? 'slit_v' : (c.w >= c.h ? 'slit_h' : 'slit_v');
-
-            if (isSlit && bentoSlitMode === 'slit_v') {
-              const normY = Math.max(0.04, Math.min(0.96, (coords.y - c.y) / c.h));
-              const cov = Math.min(100, Math.max(10, Math.round((slitVConfig.width / c.w) * 100)));
-              hasChanges = true;
-              return {
-                ...c,
-                mode: 'slit_v',
-                sampleOffset: normY,
-                slitCoverage: cov,
-                slitFrequency: slitVConfig.frequency,
-                slitOpacity: slitVConfig.opacity,
-                showArrow: slitVConfig.showArrow,
-                showLabel: slitVConfig.showLabel,
-                allowOverflow: true
-              };
-            } else if (isSlit && bentoSlitMode === 'slit_h') {
-              const normX = Math.max(0.04, Math.min(0.96, (coords.x - c.x) / c.w));
-              const cov = Math.min(100, Math.max(10, Math.round((slitHConfig.height / c.h) * 100)));
-              hasChanges = true;
-              return {
-                ...c,
-                mode: 'slit_h',
-                sampleOffset: normX,
-                slitCoverage: cov,
-                slitFrequency: slitHConfig.frequency,
-                slitOpacity: slitHConfig.opacity,
-                showArrow: slitHConfig.showArrow,
-                showLabel: slitHConfig.showLabel,
-                allowOverflow: true
-              };
-            } else if (manualBrushRole === 'card') {
-              hasChanges = true;
-              return {
-                ...c,
-                mode: 'card',
-                cardColor: cardConfig.color,
-                cutoutCardOpacity: cardConfig.opacity,
-                word: cardConfig.label || c.word,
-                showNum: cardConfig.showNum,
-                showLabel: cardConfig.showLabel
-              };
-            } else {
-              if (c.mode !== manualBrushRole) {
-                hasChanges = true;
-                return { ...c, mode: manualBrushRole };
-              }
-            }
-          }
-          return c;
-        });
-        return hasChanges ? updated : prev;
+    if (!animationFrameId.current) {
+      animationFrameId.current = requestAnimationFrame(() => {
+        drawCanvas();
+        animationFrameId.current = null;
       });
     }
+  };
+
+  const checkMask = (testNX, testNY, maskArray) => {
+    if (maskArray.length === 0) return null;
+    const aspect = canvasRef.current.width / Math.max(1, canvasRef.current.height);
+    for (let pt of maskArray) {
+      const normRadius = (pt.radius / 100) * 0.10;
+      const dx = pt.nx - testNX;
+      const dy = (pt.ny - testNY) / aspect;
+      if (Math.sqrt(dx * dx + dy * dy) < normRadius) return pt;
+    }
+    return null;
   };
 
   const handleWorkspacePointerDown = (e) => {
@@ -2427,7 +2221,49 @@ export default function App() {
     const currentFontFamily = fontFamilies[boxFontFamily] || fontFamilies['sans'];
 
     // Render cells from gridCells
-    gridCells.forEach(cell => {
+    let activeGridCells = gridCells;
+    if (engineMode === 'manual' && stretchMaskPointsRef.current.length === 0) {
+       // Clean slate before painting
+       activeGridCells = gridCells.map(c => ({...c, mode: 'intact'}));
+    }
+    
+    activeGridCells.forEach(originalCell => {
+      let cell = { ...originalCell };
+      
+      if (engineMode === 'manual' && stretchMaskPointsRef.current.length > 0) {
+         const cellCenterNX = (cell.x + cell.w / 2) / canvas.width;
+         const cellCenterNY = (cell.y + cell.h / 2) / canvas.height;
+         const maskPt = checkMask(cellCenterNX, cellCenterNY, stretchMaskPointsRef.current);
+         if (maskPt) {
+             cell.mode = maskPt.role;
+             if (maskPt.role === 'slit_scan') {
+                 cell.mode = maskPt.direction === 'h' ? 'slit_h' : 'slit_v';
+             }
+             cell.allowOverflow = true;
+             
+             if (cell.mode === 'slit_v') {
+                cell.slitCoverage = maskPt.slitVConfig.coverage;
+                cell.slitFrequency = maskPt.slitVConfig.frequency;
+                cell.slitOpacity = maskPt.slitVConfig.opacity;
+                cell.showLabel = maskPt.slitVConfig.showLabel;
+                cell.showArrow = maskPt.slitVConfig.showArrow;
+             } else if (cell.mode === 'slit_h') {
+                cell.slitCoverage = maskPt.slitHConfig.coverage;
+                cell.slitFrequency = maskPt.slitHConfig.frequency;
+                cell.slitOpacity = maskPt.slitHConfig.opacity;
+                cell.showLabel = maskPt.slitHConfig.showLabel;
+                cell.showArrow = maskPt.slitHConfig.showArrow;
+             } else if (cell.mode === 'card') {
+                cell.cardColor = maskPt.cardConfig.color;
+                cell.cutoutCardOpacity = maskPt.cardConfig.opacity;
+                cell.showNum = maskPt.cardConfig.showNum;
+                cell.showLabel = maskPt.cardConfig.showLabel;
+             }
+         } else {
+             cell.mode = 'intact';
+         }
+      }
+
       // 1. Content Rendering
       if (cell.mode === 'breakout') {
         // Pristine base image shows through cleanly without borders or slit
