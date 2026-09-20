@@ -10,6 +10,140 @@ function mulberry32(a) {
     };
 }
 
+// --- Generator Sel Grid Spesimen (Bento Space Partitioning Engine) ---
+function createGridCells({
+  bX, bY, bW, bH,
+  complexity = 55,
+  gridPartitionStyle = 'bento',
+  stretchBalance = 55,
+  cutoutCardDensity = 16,
+  heroBreakoutThreshold = 35,
+  intactCellRatio = 20,
+  seed = 12345,
+  words = []
+}) {
+  const rng = mulberry32(seed);
+  const numDivs = Math.max(3, Math.floor(4 + (complexity / 100) * 12));
+  
+  let xCuts = [bX, bX + bW];
+  let yCuts = [bY, bY + bH];
+
+  if (gridPartitionStyle === 'bento') {
+    const majorStepsX = 3 + Math.floor(rng() * 2);
+    const majorStepsY = 3 + Math.floor(rng() * 2);
+    for (let s = 1; s < majorStepsX; s++) {
+      xCuts.push(Math.floor(bX + (s / majorStepsX) * bW + (rng() - 0.5) * (bW / majorStepsX * 0.4)));
+    }
+    for (let s = 1; s < majorStepsY; s++) {
+      yCuts.push(Math.floor(bY + (s / majorStepsY) * bH + (rng() - 0.5) * (bH / majorStepsY * 0.4)));
+    }
+    const numSubX = Math.floor(numDivs * 0.5);
+    const numSubY = Math.floor(numDivs * 0.5);
+    for (let i = 0; i < numSubX; i++) {
+      const anchor = xCuts[Math.floor(rng() * xCuts.length)];
+      xCuts.push(Math.max(bX + 8, Math.min(bX + bW - 8, Math.floor(anchor + (rng() - 0.5) * (bW * 0.2)))));
+    }
+    for (let i = 0; i < numSubY; i++) {
+      const anchor = yCuts[Math.floor(rng() * yCuts.length)];
+      yCuts.push(Math.max(bY + 8, Math.min(bY + bH - 8, Math.floor(anchor + (rng() - 0.5) * (bH * 0.2)))));
+    }
+  } else if (gridPartitionStyle === 'mondrian') {
+    [0.2, 0.382, 0.5, 0.618, 0.8].forEach(r => {
+      if (rng() > 0.2) xCuts.push(Math.floor(bX + bW * (r + (rng() - 0.5) * 0.05)));
+      if (rng() > 0.2) yCuts.push(Math.floor(bY + bH * (r + (rng() - 0.5) * 0.05)));
+    });
+    for (let i = 0; i < numDivs * 0.6; i++) {
+      xCuts.push(Math.floor(bX + rng() * bW));
+      yCuts.push(Math.floor(bY + rng() * bH));
+    }
+  } else if (gridPartitionStyle === 'stripes') {
+    for (let i = 0; i < numDivs * 1.2; i++) xCuts.push(Math.floor(bX + rng() * bW));
+    for (let i = 0; i < numDivs * 1.2; i++) yCuts.push(Math.floor(bY + rng() * bH));
+  } else {
+    for (let i = 1; i <= numDivs; i++) {
+      xCuts.push(Math.floor(bX + (i / (numDivs + 1)) * bW));
+      yCuts.push(Math.floor(bY + (i / (numDivs + 1)) * bH));
+    }
+  }
+
+  xCuts = Array.from(new Set(xCuts)).sort((a,b) => a - b);
+  yCuts = Array.from(new Set(yCuts)).sort((a,b) => a - b);
+
+  const cells = [];
+  let boxCounter = 1;
+  const numX = xCuts.length - 1;
+  const numY = yCuts.length - 1;
+
+  for (let i = 0; i < numX; i++) {
+    for (let j = 0; j < numY; j++) {
+      const x = xCuts[i];
+      const y = yCuts[j];
+      const w = xCuts[i+1] - x;
+      const h = yCuts[j+1] - y;
+      if (w < 4 || h < 4) continue;
+
+      const relCX = ((x + w / 2) - bX) / bW;
+      const relCY = ((y + h / 2) - bY) / bH;
+      const distFromCenter = Math.hypot(relCX - 0.5, relCY - 0.5) * 2;
+      const isPerimeter = (i === 0 || i === numX - 1 || j === 0 || j === numY - 1);
+      const isCorner = (i <= 1 || i >= numX - 2) && (j <= 1 || j >= numY - 2);
+
+      let mode = 'slit_v';
+      let isHero = false;
+
+      // 1. Hero Breakout
+      const breakoutProb = (heroBreakoutThreshold / 100) * (isCorner ? 0.9 : isPerimeter ? 0.55 : 0.12);
+      if (rng() < breakoutProb) {
+        mode = 'breakout';
+        isHero = true;
+      } else {
+        // 2. Specimen Card
+        const cardProb = (cutoutCardDensity / 100) * (isPerimeter ? 1.4 : 0.6);
+        if (rng() < cardProb) {
+          mode = 'card';
+        } else {
+          // 3. Intact Photo
+          const intactProb = (intactCellRatio / 100) * (distFromCenter < 0.6 ? 1.5 : 0.4);
+          if (rng() < intactProb) {
+            mode = 'intact';
+          } else {
+            // 4. Slit scan: aspect ratio + stretchBalance
+            const aspect = w / h;
+            if (aspect < 0.75) {
+              mode = 'slit_v';
+            } else if (aspect > 1.35) {
+              mode = 'slit_h';
+            } else {
+              mode = (rng() * 100 < stretchBalance) ? 'slit_h' : 'slit_v';
+            }
+          }
+        }
+      }
+
+      const word = words && words.length > 0 ? words[(boxCounter - 1) % words.length] : 'SPECIMEN';
+      const num = boxCounter;
+      if (mode !== 'breakout') {
+        boxCounter++;
+      }
+
+      cells.push({
+        id: `cell_${i}_${j}`,
+        col: i,
+        row: j,
+        x, y, w, h,
+        mode,
+        word,
+        num,
+        sampleOffset: 0.5,
+        isHero,
+        cardColor: null
+      });
+    }
+  }
+
+  return cells;
+}
+
 // --- Komponen Penggaris Dinamis (Dynamic Ruler) ---
 const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
     const canvasRef = useRef(null);
@@ -148,12 +282,17 @@ export default function App() {
   const [boxBorderColor, setBoxBorderColor] = useState('auto'); // 'auto', '#000000', '#ffffff', '#10B981', '#00FFFF'
   const [boxSizeVariety, setBoxSizeVariety] = useState('editorial'); // 'balanced', 'varied', 'editorial', 'bento'
 
-  // Pola Klaster Spesimen Anatomi (Sesuai 4 Gambar Referensi)
-  const [clusterLayout, setClusterLayout] = useState('full'); // 'full', 'stepped_diagonal', 'anatomical_cross', 'columnar_t', 'horizontal_spine'
-  const [showIntactBoxBorders, setShowIntactBoxBorders] = useState(false); // Beri garis & label pada kotak normal utuh
-  const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Tampilkan panah ↓ / → pada angka sesuai arah slit
-  const [outerFramingCards, setOuterFramingCards] = useState(true); // Kartu putih pembingkai spesimen di perimeter klaster
-  const [heroBreakout, setHeroBreakout] = useState(true); // Bebaskan kepala/wajah subjek agar utuh menembus grid
+  // --- MESIN PEMROSESAN GRID SPESIMEN (CELL-BASED PROCESSING ENGINE) ---
+  const [engineMode, setEngineMode] = useState('auto'); // 'auto' (generatif cerdas) | 'manual' (interaktif sel & kuas)
+  const [gridPartitionStyle, setGridPartitionStyle] = useState('bento'); // 'bento', 'mondrian', 'stripes', 'regular'
+  const [gridCells, setGridCells] = useState([]); // Array objek sel
+  const [selectedCellId, setSelectedCellId] = useState(null); // Sel terpilih di kanvas
+  const [hoveredCellId, setHoveredCellId] = useState(null); // Sel hover di kanvas
+  const [manualBrushRole, setManualBrushRole] = useState('slit_v'); // 'slit_v', 'slit_h', 'card', 'intact', 'breakout'
+  const [heroBreakoutThreshold, setHeroBreakoutThreshold] = useState(35); // 0 s/d 100%
+  const [intactCellRatio, setIntactCellRatio] = useState(20); // 0 s/d 50%
+  const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Panah ↓ / →
+  const [showIntactBoxBorders, setShowIntactBoxBorders] = useState(true); // Garis & label pada sel utuh
 
   // Kartu Cutout Solid
   const [showCutoutCards, setShowCutoutCards] = useState(true);
@@ -262,21 +401,22 @@ export default function App() {
               handleRandomize();
               showToast('Seed Diacak 🔀');
           } else if (e.key === '1') {
-              applyPreset('cat_diagonal');
+              applyPreset('specimen_bento');
           } else if (e.key === '2') {
-              applyPreset('goldfish_axial');
+              applyPreset('specimen_axial');
           } else if (e.key === '3') {
-              applyPreset('flamingo_column');
+              applyPreset('specimen_ribbon');
           } else if (e.key === '4') {
-              applyPreset('fish_skeleton');
-          } else if (e.key === '5') {
               applyPreset('editorial');
-          } else if (e.key === '6') {
+          } else if (e.key === '5') {
               applyPreset('cyber');
-          } else if (e.key === '7') {
+          } else if (e.key === '6') {
               applyPreset('zine');
-          } else if (e.key === '8') {
+          } else if (e.key === '7') {
               applyPreset('minimal');
+          } else if (e.key === 'm' || e.key === 'M') {
+              setEngineMode(prev => prev === 'auto' ? 'manual' : 'auto');
+              showToast(`Ganti Mode Operasi`);
           } else if (e.key === '?') {
               setShowShortcutsModal(prev => !prev);
           }
@@ -326,9 +466,7 @@ export default function App() {
     cardMaskPointsRef.current = []; 
     showToast('Kanvas Diputar 90°');
   };
-  const handleRandomize = () => {
-    setSeed(Math.random() * 10000);
-  };
+
 
   // --- SAMPEL ESTETIK BAWAAN (Untuk Pengujian Instan 1-Klik) ---
   const loadAestheticSample = () => {
@@ -374,133 +512,99 @@ export default function App() {
 
   // --- PRESET SYSTEM (1-Klik Tampilan Siap Pakai) ---
   const applyPreset = (presetName) => {
-    if (presetName === 'cat_diagonal') {
-      setClusterLayout('stepped_diagonal');
-      setShowScratchBoxes(true);
-      setShowIntactBoxBorders(true);
-      setShowBoxTypography(true);
-      setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
-      setShowCutoutCards(true);
-      setCutoutCardColor('#FFFFFF');
-      setCutoutCardOpacity(100);
-      setBoxBorderWidth(1);
-      setBoxBorderColor('#000000');
-      setBoxSizeVariety('bento');
-      setBoxFontFamily('sans');
-      setBoxNumberFormat('arrows');
-      setRenderStyle('classic');
+    if (presetName === 'specimen_bento') {
+      setEngineMode('auto');
+      setGridPartitionStyle('bento');
       setStretchBalance(55);
-      setStretchInt(75);
-      setComplexity(50);
-      setIsDarkMode(false);
-      setShowGridLines(false);
-      setShowTextAnnotations(false);
-      showToast('Preset: 🐱 Stepped Diagonal (Cat) diterapkan');
-    } else if (presetName === 'goldfish_axial') {
-      setClusterLayout('anatomical_cross');
-      setShowScratchBoxes(true);
-      setShowIntactBoxBorders(true);
-      setShowBoxTypography(true);
-      setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
-      setShowCutoutCards(true);
-      setCutoutCardColor('#FFFFFF');
-      setCutoutCardOpacity(100);
-      setBoxBorderWidth(1);
-      setBoxBorderColor('#000000');
-      setBoxSizeVariety('editorial');
-      setBoxFontFamily('sans');
-      setBoxNumberFormat('arrows');
-      setRenderStyle('classic');
-      setStretchBalance(70);
-      setStretchInt(80);
+      setHeroBreakoutThreshold(40);
+      setCutoutCardDensity(16);
+      setIntactCellRatio(25);
       setComplexity(55);
-      setIsDarkMode(false);
-      setShowGridLines(false);
-      setShowTextAnnotations(false);
-      showToast('Preset: 🐠 Axial Cross (Goldfish) diterapkan');
-    } else if (presetName === 'flamingo_column') {
-      setClusterLayout('columnar_t');
       setShowScratchBoxes(true);
-      setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
       setBoxBorderWidth(1);
       setBoxBorderColor('#000000');
-      setBoxSizeVariety('editorial');
       setBoxFontFamily('sans');
       setBoxNumberFormat('arrows');
-      setRenderStyle('classic');
-      setStretchBalance(35);
-      setStretchInt(75);
-      setComplexity(45);
       setIsDarkMode(false);
-      setShowGridLines(false);
-      setShowTextAnnotations(false);
-      showToast('Preset: 🦩 Columnar T-Frame (Flamingo) diterapkan');
-    } else if (presetName === 'fish_skeleton') {
-      setClusterLayout('horizontal_spine');
+      showToast('Preset: 🍱 Swiss Specimen Bento diterapkan');
+    } else if (presetName === 'specimen_axial') {
+      setEngineMode('auto');
+      setGridPartitionStyle('mondrian');
+      setStretchBalance(70);
+      setHeroBreakoutThreshold(30);
+      setCutoutCardDensity(20);
+      setIntactCellRatio(30);
+      setComplexity(50);
       setShowScratchBoxes(true);
-      setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
       setBoxBorderWidth(1);
       setBoxBorderColor('#000000');
-      setBoxSizeVariety('bento');
       setBoxFontFamily('sans');
       setBoxNumberFormat('arrows');
-      setRenderStyle('classic');
-      setStretchBalance(50);
-      setStretchInt(70);
-      setComplexity(58);
       setIsDarkMode(false);
-      setShowGridLines(false);
-      setShowTextAnnotations(false);
-      showToast('Preset: 🦴 Anatomy Spine (Fish) diterapkan');
+      showToast('Preset: 🔬 Swiss Specimen Aksial diterapkan');
+    } else if (presetName === 'specimen_ribbon') {
+      setEngineMode('auto');
+      setGridPartitionStyle('stripes');
+      setStretchBalance(40);
+      setHeroBreakoutThreshold(45);
+      setCutoutCardDensity(15);
+      setIntactCellRatio(15);
+      setComplexity(65);
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowDirectionArrows(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#000000');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('arrows');
+      setIsDarkMode(false);
+      showToast('Preset: 🌊 Swiss Specimen Ribbon diterapkan');
     } else if (presetName === 'editorial') {
-      setClusterLayout('full');
-      setShowIntactBoxBorders(false);
-      setShowDirectionArrows(false);
+      setEngineMode('auto');
+      setGridPartitionStyle('bento');
+      setStretchBalance(75);
+      setHeroBreakoutThreshold(0);
+      setCutoutCardDensity(10);
+      setIntactCellRatio(15);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
+      setShowDirectionArrows(false);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
       setBoxBorderWidth(1);
       setBoxBorderColor('auto');
-      setBoxSizeVariety('editorial');
       setBoxFontFamily('sans');
       setBoxNumberFormat('plus');
-      setRenderStyle('classic');
       setStretchInt(70);
       setComplexity(50);
-      setDensity(70);
-      setShowGridLines(false);
-      setShowTextAnnotations(false);
       showToast('Preset: 📰 Editorial Grid diterapkan');
     } else if (presetName === 'cyber') {
-      setClusterLayout('full');
-      setShowIntactBoxBorders(false);
-      setShowDirectionArrows(false);
+      setEngineMode('auto');
+      setGridPartitionStyle('stripes');
+      setStretchBalance(85);
+      setHeroBreakoutThreshold(10);
+      setCutoutCardDensity(0);
+      setIntactCellRatio(10);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
+      setShowDirectionArrows(false);
       setShowCutoutCards(false);
       setBoxBorderWidth(1);
       setBoxBorderColor('#00FFFF');
-      setBoxSizeVariety('varied');
       setBoxFontFamily('mono');
       setBoxNumberFormat('pad');
       setRenderStyle('glitch');
@@ -508,9 +612,12 @@ export default function App() {
       setTextColor('#00FFFF');
       showToast('Preset: ⚡ Cyber Slit diterapkan');
     } else if (presetName === 'zine') {
-      setClusterLayout('full');
-      setShowIntactBoxBorders(false);
-      setShowDirectionArrows(false);
+      setEngineMode('auto');
+      setGridPartitionStyle('bento');
+      setStretchBalance(50);
+      setHeroBreakoutThreshold(15);
+      setCutoutCardDensity(20);
+      setIntactCellRatio(20);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
       setShowCutoutCards(true);
@@ -518,16 +625,18 @@ export default function App() {
       setCutoutCardOpacity(100);
       setBoxBorderWidth(2);
       setBoxBorderColor('#000000');
-      setBoxSizeVariety('bento');
       setBoxFontFamily('grotesk');
       setBoxNumberFormat('standard');
       setRenderStyle('zine');
       setBrutalInt(45);
       showToast('Preset: 📄 Brutal Zine diterapkan');
     } else if (presetName === 'minimal') {
-      setClusterLayout('full');
-      setShowIntactBoxBorders(false);
-      setShowDirectionArrows(false);
+      setEngineMode('auto');
+      setGridPartitionStyle('regular');
+      setStretchBalance(50);
+      setHeroBreakoutThreshold(0);
+      setCutoutCardDensity(0);
+      setIntactCellRatio(0);
       setShowScratchBoxes(false);
       setShowBoxTypography(false);
       setShowCutoutCards(false);
@@ -674,15 +783,65 @@ export default function App() {
 
   const currentTool = isSpacePressed ? 'pan' : activeTool;
 
+  const getCanvasCoords = (clientX, clientY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+    const x = ((clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    return { x, y };
+  };
+
+  const applyBrushAtPoint = (e) => {
+    const coords = getCanvasCoords(e.clientX, e.clientY);
+    if (!coords) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const brushRadiusCanvas = (brushSize / 100) * (canvas.width * 0.08);
+    setGridCells(prev => {
+      let hasChanges = false;
+      const updated = prev.map(c => {
+        const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
+        const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
+        const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
+        if (distSq <= brushRadiusCanvas**2 && c.mode !== manualBrushRole) {
+          hasChanges = true;
+          return { ...c, mode: manualBrushRole };
+        }
+        return c;
+      });
+      return hasChanges ? updated : prev;
+    });
+  };
+
   const handleWorkspacePointerDown = (e) => {
     if (!image) return;
     if (currentTool === 'pan') {
       setIsPanning(true);
       e.target.setPointerCapture(e.pointerId);
-    } else if (currentTool === 'brush' && isManualMode) {
+    } else if (currentTool === 'brush' && engineMode === 'manual') {
       isPaintingRef.current = true;
       e.target.setPointerCapture(e.pointerId);
-      addMaskPoint(e);
+      applyBrushAtPoint(e);
+    } else if (engineMode === 'manual') {
+      // Klik sel langsung untuk memilih atau mengganti mode
+      const coords = getCanvasCoords(e.clientX, e.clientY);
+      if (coords) {
+        const clicked = gridCells.find(c => coords.x >= c.x && coords.x <= c.x + c.w && coords.y >= c.y && coords.y <= c.y + c.h);
+        if (clicked) {
+          if (selectedCellId === clicked.id) {
+            const cycleOrder = ['slit_v', 'slit_h', 'intact', 'card', 'breakout'];
+            const nextMode = cycleOrder[(cycleOrder.indexOf(clicked.mode) + 1) % cycleOrder.length];
+            setGridCells(prev => prev.map(c => c.id === clicked.id ? { ...c, mode: nextMode } : c));
+          } else {
+            setSelectedCellId(clicked.id);
+          }
+        } else {
+          setSelectedCellId(null);
+        }
+      }
     }
   };
 
@@ -701,8 +860,16 @@ export default function App() {
     else if (isPanning) {
       setPan(prev => ({ x: prev.x + e.nativeEvent.movementX, y: prev.y + e.nativeEvent.movementY }));
     } 
-    else if (isPaintingRef.current && currentTool === 'brush' && isManualMode) {
-      addMaskPoint(e);
+    else if (isPaintingRef.current && currentTool === 'brush' && engineMode === 'manual') {
+      applyBrushAtPoint(e);
+    } else if (engineMode === 'manual') {
+      const coords = getCanvasCoords(e.clientX, e.clientY);
+      if (coords) {
+        const hovered = gridCells.find(c => coords.x >= c.x && coords.x <= c.x + c.w && coords.y >= c.y && coords.y <= c.y + c.h);
+        setHoveredCellId(hovered ? hovered.id : null);
+      } else {
+        if (hoveredCellId) setHoveredCellId(null);
+      }
     }
   };
 
@@ -734,29 +901,80 @@ export default function App() {
     setDraggingGuide({ id: newId, type });
   };
 
-  const addMaskPoint = (e) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const nx = (e.clientX - rect.left) / rect.width;
-      const ny = (e.clientY - rect.top) / rect.height;
+  const generateAutomaticGrid = useCallback((customSeed = seed) => {
+    if (!image) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-      const point = { nx, ny, radius: brushSize };
+    const isRotated = rotation % 180 !== 0;
+    const formats = {
+        'original': { w: image.width, h: image.height },
+        'square': { w: 1080, h: 1080 },
+        'portrait': { w: 1080, h: 1350 },
+        'landscape': { w: 1920, h: 1080 },
+        'story': { w: 1080, h: 1920 },
+        'a4': { w: 1240, h: 1754 }
+    };
+    let baseW = formats[canvasFormat].w;
+    let baseH = formats[canvasFormat].h;
+    const canvasW = isRotated ? baseH : baseW;
+    const canvasH = isRotated ? baseW : baseH;
 
-      if (brushTarget === 'card') {
-          cardMaskPointsRef.current.push(point);
-      } else {
-          stretchMaskPointsRef.current.push(point);
-      }
+    const centerX = canvasW / 2;
+    const centerY = canvasH / 2;
+    const scaleFactor = scale / 100; 
+    const drawW = Math.floor(image.width * scaleFactor);
+    const drawH = Math.floor(image.height * scaleFactor);
+    const effectiveImgW = isRotated ? drawH : drawW;
+    const effectiveImgH = isRotated ? drawW : drawH;
+    const imgX = Math.floor(centerX - effectiveImgW / 2 + imageOffsetX);
+    const imgY = Math.floor(centerY - effectiveImgH / 2 + imageOffsetY);
+    const imgW = effectiveImgW;
+    const imgH = effectiveImgH;
 
-      if (!animationFrameId.current) {
-          animationFrameId.current = requestAnimationFrame(() => { drawCanvas(); animationFrameId.current = null; });
-      }
+    const isImageLocked = gridBoundsMode === 'image';
+    const bX = isImageLocked ? imgX : 0;
+    const bY = isImageLocked ? imgY : 0;
+    const bW = isImageLocked ? imgW : canvasW;
+    const bH = isImageLocked ? imgH : canvasH;
+
+    const newCells = createGridCells({
+      bX, bY, bW, bH,
+      complexity,
+      gridPartitionStyle,
+      stretchBalance,
+      cutoutCardDensity,
+      heroBreakoutThreshold,
+      intactCellRatio,
+      seed: customSeed,
+      words: aiWords
+    });
+
+    setGridCells(newCells);
+  }, [
+    image, rotation, canvasFormat, scale, imageOffsetX, imageOffsetY, gridBoundsMode,
+    complexity, gridPartitionStyle, stretchBalance, cutoutCardDensity,
+    heroBreakoutThreshold, intactCellRatio, seed, aiWords
+  ]);
+
+  useEffect(() => {
+    if (image && engineMode === 'auto') {
+      generateAutomaticGrid();
+    }
+  }, [
+    image, scale, rotation, canvasFormat, gridBoundsMode, complexity, gridPartitionStyle,
+    stretchBalance, cutoutCardDensity, heroBreakoutThreshold, intactCellRatio,
+    seed, aiWords, imageOffsetX, imageOffsetY, engineMode, generateAutomaticGrid
+  ]);
+
+  const handleRandomize = () => {
+    const nextSeed = Math.random() * 10000;
+    setSeed(nextSeed);
+    if (engineMode === 'auto') {
+      generateAutomaticGrid(nextSeed);
+    }
+    showToast('Struktur Grid Diacak 🔀');
   };
-
-  const clearStretchMask = () => { stretchMaskPointsRef.current = []; drawCanvas(); showToast('Mask Stretch Dihapus'); };
-  const clearCardMask = () => { cardMaskPointsRef.current = []; drawCanvas(); showToast('Mask Kartu Dihapus'); };
-  const clearAllMasks = () => { stretchMaskPointsRef.current = []; cardMaskPointsRef.current = []; drawCanvas(); showToast('Semua Mask Kuas Dihapus'); };
 
   const hexToRgba = (hex, opacityPercent) => {
     if (!hex) return '#FFFFFF';
@@ -788,7 +1006,7 @@ export default function App() {
     'condensed': '"Arial Narrow", "Trebuchet MS", sans-serif'
   };
 
-  // --- LOGIKA UTAMA PENGGAMBARAN KANVAS ---
+  // --- LOGIKA UTAMA PENGGAMBARAN KANVAS (CELL-BASED PROCESSING ENGINE) ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -801,9 +1019,7 @@ export default function App() {
       return;
     }
 
-    const rng = mulberry32(seed);
     const isRotated = rotation % 180 !== 0;
-    
     const formats = {
         'original': { w: image.width, h: image.height },
         'square': { w: 1080, h: 1080 },
@@ -815,16 +1031,15 @@ export default function App() {
 
     let baseW = formats[canvasFormat].w;
     let baseH = formats[canvasFormat].h;
-
     canvas.width = isRotated ? baseH : baseW;
     canvas.height = isRotated ? baseW : baseH;
     const relScale = Math.max(1, canvas.width / 1000); 
-    
+
     ctx.imageSmoothingEnabled = brutalInt < 50; 
-    
     ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
+    // Offscreen buffer for original untransformed image
     const offscreen = document.createElement('canvas');
     offscreen.width = canvas.width; offscreen.height = canvas.height;
     const offCtx = offscreen.getContext('2d');
@@ -843,7 +1058,7 @@ export default function App() {
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    // Hitung Bounding Box Gambar Aktual di atas Kanvas
+    // Actual image bounds
     const effectiveImgW = isRotated ? drawH : drawW;
     const effectiveImgH = isRotated ? drawW : drawH;
     const imgX = Math.floor(centerX - effectiveImgW / 2 + imageOffsetX);
@@ -857,520 +1072,168 @@ export default function App() {
     const bW = isImageLocked ? imgW : canvas.width;
     const bH = isImageLocked ? imgH : canvas.height;
 
-    // Pembuatan Garis Potong (Cuts) Terikat pada Batas (bX, bY, bW, bH)
-    const numCols = Math.floor(6 + (complexity / 100) * 55);
-    const numRows = Math.floor(6 + (complexity / 100) * 55);
-    
-    let xCuts = [bX, bX + bW];
-    let yCuts = [bY, bY + bH];
-
-    if (boxSizeVariety === 'varied') {
-        const majorCols = Math.floor(numCols * 0.35);
-        for(let i = 0; i < majorCols; i++) xCuts.push(Math.floor(bX + rng() * bW));
-        for(let i = 0; i < numCols - majorCols; i++) {
-            const anchor = xCuts[Math.floor(rng() * xCuts.length)];
-            const offset = (rng() - 0.5) * (bW * 0.3);
-            const val = Math.max(bX + 5, Math.min(bX + bW - 5, Math.floor(anchor + offset)));
-            xCuts.push(val);
-        }
-        const majorRows = Math.floor(numRows * 0.35);
-        for(let i = 0; i < majorRows; i++) yCuts.push(Math.floor(bY + rng() * bH));
-        for(let i = 0; i < numRows - majorRows; i++) {
-            const anchor = yCuts[Math.floor(rng() * yCuts.length)];
-            const offset = (rng() - 0.5) * (bH * 0.3);
-            const val = Math.max(bY + 5, Math.min(bY + bH - 5, Math.floor(anchor + offset)));
-            yCuts.push(val);
-        }
-    } else if (boxSizeVariety === 'editorial') {
-        const divisionsX = [0.15, 0.35, 0.58, 0.78, 0.90];
-        divisionsX.forEach(ratio => {
-            if (rng() > 0.25) xCuts.push(Math.floor(bX + bW * (ratio + (rng() - 0.5) * 0.08)));
-        });
-        const divisionsY = [0.12, 0.30, 0.50, 0.72, 0.88];
-        divisionsY.forEach(ratio => {
-            if (rng() > 0.25) yCuts.push(Math.floor(bY + bH * (ratio + (rng() - 0.5) * 0.08)));
-        });
-        for(let i = 0; i < Math.floor(numCols * 0.6); i++) xCuts.push(Math.floor(bX + rng() * bW));
-        for(let i = 0; i < Math.floor(numRows * 0.6); i++) yCuts.push(Math.floor(bY + rng() * bH));
-    } else if (boxSizeVariety === 'bento') {
-        const stepX = bW / 4;
-        const stepY = bH / 4;
-        for(let s = 1; s < 4; s++) {
-            xCuts.push(Math.floor(bX + s * stepX + (rng() - 0.5) * (stepX * 0.35)));
-            yCuts.push(Math.floor(bY + s * stepY + (rng() - 0.5) * (stepY * 0.35)));
-        }
-        for(let i = 0; i < Math.floor(numCols * 0.45); i++) xCuts.push(Math.floor(bX + rng() * bW));
-        for(let i = 0; i < Math.floor(numRows * 0.45); i++) yCuts.push(Math.floor(bY + rng() * bH));
+    // Draw base image onto canvas
+    if (isImageLocked) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bX, bY, bW, bH);
+      ctx.clip();
+      ctx.drawImage(offscreen, bX, bY, bW, bH, bX, bY, bW, bH);
+      ctx.restore();
     } else {
-        for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(bX + rng() * bW));
-        for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(bY + rng() * bH));
-    }
-
-    xCuts = Array.from(new Set(xCuts)).sort((a,b) => a - b);
-    yCuts = Array.from(new Set(yCuts)).sort((a,b) => a - b);
-
-    const stretchProb = Math.min(stretchInt, 100) / 100; 
-    const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
-    const pCardCutout = showCutoutCards ? (cutoutCardDensity / 100) * 0.4 : 0;
-    const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
-
-    const checkMask = (testNX, testNY, maskArray) => {
-        if (!maskArray || maskArray.length === 0) return false;
-        const aspect = canvas.width / canvas.height;
-        for (let pt of maskArray) {
-            const normRadius = (pt.radius / 100) * 0.10; 
-            const dx = pt.nx - testNX; 
-            const dy = (pt.ny - testNY) / aspect; 
-            if (Math.sqrt(dx*dx + dy*dy) < normRadius) return true;
-        }
-        return false;
-    };
-
-    const normalPass = [];
-    const stretchPass = [];
-    const cutoutCardPass = [];
-
-    for (let i = 0; i < xCuts.length - 1; i++) {
-        for (let j = 0; j < yCuts.length - 1; j++) {
-            const x = xCuts[i]; const y = yCuts[j];
-            const w = xCuts[i+1] - x; const h = yCuts[j+1] - y;
-            if (w < 1 || h < 1) continue;
-
-            const dstW = w + 1; const dstH = h + 1;
-            const cellCenterNX = (x + w / 2) / canvas.width;
-            const cellCenterNY = (y + h / 2) / canvas.height;
-            const relCX = ((x + w / 2) - bX) / bW;
-            const relCY = ((y + h / 2) - bY) / bH;
-
-            let inCluster = true;
-            let isHeroZone = false;
-            let isPerimeterCard = false;
-            let cardArrow = '';
-
-            if (clusterLayout === 'stepped_diagonal') {
-                // Diagonal staircase (Gaya Kucing)
-                const diagCenter = 0.22 + 0.65 * relCX;
-                const dist = relCY - diagCenter;
-
-                if (heroBreakout && relCX < 0.42 && relCY < 0.35) {
-                    isHeroZone = true;
-                    inCluster = true;
-                } else if (heroBreakout && relCX > 0.62 && relCY < 0.52) {
-                    inCluster = false;
-                } else if (dist >= -0.25 && dist <= 0.32) {
-                    inCluster = true;
-                    if (outerFramingCards && (dist >= 0.10 || (relCX < 0.28 && relCY >= 0.32 && relCY <= 0.60))) {
-                        isPerimeterCard = true;
-                        cardArrow = relCY > 0.55 ? '↓' : '→';
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'anatomical_cross') {
-                // Silang Aksial (Gaya Ikan Mas)
-                const inHoriz = relCY >= 0.22 && relCY <= 0.78;
-                const inVert = relCX >= 0.20 && relCX <= 0.68;
-
-                if (inHoriz || inVert) {
-                    inCluster = true;
-                    if (heroBreakout && relCX >= 0.46 && relCX <= 0.82 && relCY >= 0.42 && relCY <= 0.72) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if (relCX < 0.28 || (relCY < 0.32 && relCX < 0.45) || (relCY > 0.72 && relCX > 0.52)) {
-                            isPerimeterCard = true;
-                            cardArrow = relCY > 0.5 ? '↓' : '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'columnar_t') {
-                // Tiang Vertikal T (Gaya Flamingo)
-                const inBody = relCY >= 0.24 && relCY <= 0.50 && relCX >= 0.12 && relCX <= 0.82;
-                const inLegs = relCX >= 0.36 && relCX <= 0.62 && relCY >= 0.24 && relCY <= 0.95;
-                const inNeck = relCX >= 0.54 && relCX <= 0.78 && relCY >= 0.12 && relCY <= 0.38;
-
-                if (inBody || inLegs || inNeck) {
-                    inCluster = true;
-                    if (heroBreakout && relCX >= 0.66 && relCY <= 0.28) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if (relCX < 0.28 && relCY >= 0.24 && relCY <= 0.65) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        } else if (relCX > 0.54 && relCY >= 0.68) {
-                            isPerimeterCard = true;
-                            cardArrow = '↓';
-                        } else if (relCX < 0.42 && relCY < 0.28) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'horizontal_spine') {
-                // Tulang Spine (Gaya Tulang Ikan)
-                const inSpine = relCY >= 0.32 && relCY <= 0.64 && relCX >= 0.05 && relCX <= 0.95;
-                const inDorsal = relCY >= 0.12 && relCY <= 0.42 && relCX >= 0.25 && relCX <= 0.78;
-                const inVentral = relCY >= 0.56 && relCY <= 0.88 && relCX >= 0.25 && relCX <= 0.78;
-
-                if (inSpine || inDorsal || inVentral) {
-                    inCluster = true;
-                    if (heroBreakout && (relCX <= 0.24 || relCX >= 0.80)) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if ((relCX < 0.20 && relCY > 0.50) || (relCX > 0.75 && relCY > 0.55)) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            }
-
-            if (!inCluster) {
-                normalPass.push({ type: 'breakout', x, y, w, h, dstW, dstH, inCluster: false });
-                continue;
-            }
-
-            let applyStretch = false;
-            let applyCard = isPerimeterCard;
-
-            if (isManualMode) {
-                applyCard = checkMask(cellCenterNX, cellCenterNY, cardMaskPointsRef.current);
-                applyStretch = checkMask(cellCenterNX, cellCenterNY, stretchMaskPointsRef.current);
-            } else if (!isPerimeterCard && !isHeroZone) {
-                const r = rng();
-                if (showCutoutCards && r < pCardCutout && w >= 28 * relScale && h >= 20 * relScale) {
-                    applyCard = true;
-                } else if (r < pCardCutout + stretchProb) {
-                    applyStretch = true;
-                }
-            }
-
-            if (applyCard) {
-                cutoutCardPass.push({ type: 'card', x, y, w, h, dstW, dstH, cardArrow: cardArrow || (rng() > 0.6 ? (rng() > 0.5 ? '→' : '↓') : ''), inCluster: true });
-            } else if (applyStretch) {
-                let isHoriz = rng() < (stretchBalance / 100);
-                if (!stretchDirX && stretchDirY) isHoriz = false;
-                if (stretchDirX && !stretchDirY) isHoriz = true;
-                const isBrutal = rng() < (brutalInt / 100);
-
-                let sliceW = Math.max(1, Math.floor(1 * relScale * 0.5)); 
-                let sliceH = Math.max(1, Math.floor(1 * relScale * 0.5)); 
-                let srcX = rng() > 0.5 ? x : (x + w - sliceW); 
-                let srcY = rng() > 0.5 ? y : (y + h - sliceH); 
-
-                if (isBrutal) {
-                    if (isHoriz) {
-                        sliceW = Math.floor(rng() * maxThick) + 1;
-                        if (sliceW > w) sliceW = w;
-                        if (rng() > 0.4) srcX = x + Math.floor(rng() * (w - sliceW));
-                    } else {
-                        sliceH = Math.floor(rng() * maxThick) + 1;
-                        if (sliceH > h) sliceH = h;
-                        if (rng() > 0.4) srcY = y + Math.floor(rng() * (h - sliceH));
-                    }
-                }
-                if(srcX < x) srcX = x;
-                if(srcY < y) srcY = y;
-
-                stretchPass.push({ 
-                    type: isHoriz ? 'slit_h' : 'slit_v',
-                    isHoriz, srcX, srcY, sliceW, sliceH, 
-                    x, y, w, h, dstW, dstH, inCluster: true 
-                });
-            } else {
-                normalPass.push({ type: isHeroZone ? 'hero' : 'intact', x, y, w, h, dstW, dstH, inCluster: true });
-            }
-        }
+      ctx.drawImage(offscreen, 0, 0);
     }
 
     if (renderStyle === 'zine') {
-        ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
+      ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
     }
 
-    // Aktifkan Kliping Batas Gambar (mencegah slit-scan streak atau garis meluap ke luar gambar)
-    if (isImageLocked) {
+    // Typography metrics
+    const strokeW = Math.max(1, Math.floor(boxBorderWidth * relScale));
+    const fontScale = boxFontSize / 100;
+    const mainFontSize = Math.max(8, Math.floor(12 * relScale * fontScale));
+    const subFontSize = Math.max(7, Math.floor(9.5 * relScale * fontScale));
+    const padX = Math.max(3, Math.floor(4 * relScale));
+    const padY = Math.max(2, Math.floor(3 * relScale));
+    const currentFontFamily = fontFamilies[boxFontFamily] || fontFamilies['sans'];
+
+    // Render cells from gridCells
+    gridCells.forEach(cell => {
+      // 1. Content Rendering
+      if (cell.mode === 'breakout') {
+        // Pristine base image shows through cleanly without borders or slit
+        return;
+      }
+
+      if (cell.mode === 'intact') {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(bX, bY, bW, bH);
+        ctx.rect(cell.x, cell.y, cell.w, cell.h);
         ctx.clip();
-        // Gambar dasar gambar agar tidak ada celah garis mikro
-        ctx.drawImage(offscreen, bX, bY, bW, bH, bX, bY, bW, bH);
-    }
-
-    // Pass 1: Gambar Normal
-    normalPass.forEach(op => {
-        ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
-    });
-
-    // Pass 2: Gambar Slit-Scan Streaks
-    stretchPass.forEach(op => {
-        let srcX = op.x; let srcY = op.y;
-        let srcW = op.w; let srcH = op.h;
-        let dstX = op.x; let dstY = op.y;
-        let dstW = op.dstW; let dstH = op.dstH;
-
-        if (op.isHoriz && stretchDirX) {
-            srcX = op.srcX; srcW = op.sliceW;
-            dstW = op.dstW * stretchMultiplier;
-        } else if (!op.isHoriz && stretchDirY) {
-            srcY = op.srcY; srcH = op.sliceH;
-            dstH = op.dstH * stretchMultiplier;
-        }
-
-        if (renderStyle === 'liquid') {
-            if (op.isHoriz && stretchDirX) {
-                dstY += Math.sin(op.x * 0.05 + seed) * 15 * relScale;
-            } else if (!op.isHoriz && stretchDirY) {
-                dstX += Math.cos(op.y * 0.05 + seed) * 15 * relScale;
-            }
-        }
-
-        const drawOp = (xOff = 0, yOff = 0) => {
-            ctx.drawImage(offscreen, srcX, srcY, srcW, srcH, dstX + xOff, dstY + yOff, dstW, dstH);
-        };
-
-        if (renderStyle === 'glitch') {
-            ctx.save();
-            ctx.globalCompositeOperation = 'screen';
-            ctx.globalAlpha = 0.6;
-            
-            ctx.filter = 'sepia(100%) hue-rotate(180deg) saturate(400%)';
-            drawOp(-4 * relScale, 0);
-            
-            ctx.filter = 'sepia(100%) hue-rotate(300deg) saturate(400%)';
-            drawOp(4 * relScale, 0);
-            
-            ctx.filter = 'none';
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.globalAlpha = 1.0;
-            drawOp(0, 0);
-            
-            ctx.restore();
-        } else {
-            drawOp(0, 0);
-        }
-    });
-
-    ctx.filter = 'none';
-
-    // Pass 3: Kartu Cutout Solid
-    if (cutoutCardPass.length > 0) {
-        ctx.save();
-        const cardFillStyle = hexToRgba(cutoutCardColor, cutoutCardOpacity);
-        ctx.fillStyle = cardFillStyle;
-
-        cutoutCardPass.forEach(card => {
-            ctx.fillRect(card.x, card.y, card.w, card.h);
-        });
-
+        ctx.drawImage(offscreen, cell.x, cell.y, cell.w, cell.h, cell.x, cell.y, cell.w, cell.h);
         ctx.restore();
-    }
-
-    // Pass 4: Tekstur Zine Grain
-    if (renderStyle === 'zine') {
-        const noiseCnv = document.createElement('canvas');
-        noiseCnv.width = 100; noiseCnv.height = 100;
-        const nCtx = noiseCnv.getContext('2d');
-        const imgData = nCtx.createImageData(100, 100);
-        const data32 = new Uint32Array(imgData.data.buffer);
-        for(let k=0; k<data32.length; k++) {
-            const v = (rng() * 255) | 0; 
-            data32[k] = 0xFF000000 | v<<16 | v<<8 | v;
-        }
-        nCtx.putImageData(imgData, 0, 0);
-
+      } else if (cell.mode === 'slit_v') {
+        const sampleOffset = cell.sampleOffset != null ? cell.sampleOffset : 0.5;
+        const sampleY = Math.floor(cell.y + cell.h * sampleOffset);
+        const sliceH = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.save();
-        ctx.globalCompositeOperation = 'overlay';
-        ctx.globalAlpha = 0.3;
-        ctx.fillStyle = ctx.createPattern(noiseCnv, 'repeat');
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.rect(cell.x, cell.y, cell.w, cell.h);
+        ctx.clip();
+        ctx.drawImage(offscreen, cell.x, sampleY, cell.w, sliceH, cell.x, cell.y, cell.w, cell.h);
         ctx.restore();
-    }
-
-    // Kotak Bingkai
-    if (showScratchBoxes) {
+      } else if (cell.mode === 'slit_h') {
+        const sampleOffset = cell.sampleOffset != null ? cell.sampleOffset : 0.5;
+        const sampleX = Math.floor(cell.x + cell.w * sampleOffset);
+        const sliceW = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.save();
-        const strokeW = Math.max(1, Math.floor(boxBorderWidth * relScale));
+        ctx.beginPath();
+        ctx.rect(cell.x, cell.y, cell.w, cell.h);
+        ctx.clip();
+        ctx.drawImage(offscreen, sampleX, cell.y, sliceW, cell.h, cell.x, cell.y, cell.w, cell.h);
+        ctx.restore();
+      } else if (cell.mode === 'card') {
+        ctx.save();
+        const cardFill = hexToRgba(cell.cardColor || cutoutCardColor, cutoutCardOpacity);
+        ctx.fillStyle = cardFill;
+        ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
+        ctx.restore();
+      }
+
+      // 2. Wireframe Border
+      if (showScratchBoxes) {
+        ctx.save();
         ctx.lineWidth = strokeW;
-
-        let boxesToStroke = [...stretchPass, ...cutoutCardPass];
-        if (showIntactBoxBorders) {
-            const intactInCluster = normalPass.filter(op => op.inCluster && (op.type === 'intact' || op.type === 'hero'));
-            boxesToStroke = [...boxesToStroke, ...intactInCluster];
+        if (boxBorderColor === 'auto') {
+          if (cell.mode === 'card') {
+            ctx.strokeStyle = getContrastTextColor(cell.cardColor || cutoutCardColor) === '#000000'
+              ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)';
+          } else {
+            ctx.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.75)';
+          }
+        } else {
+          ctx.strokeStyle = boxBorderColor;
         }
-
-        boxesToStroke.forEach(box => {
-            if (boxBorderColor === 'auto') {
-                if (cutoutCardPass.includes(box)) {
-                    ctx.strokeStyle = getContrastTextColor(cutoutCardColor) === '#000000' 
-                        ? 'rgba(0,0,0,0.85)' 
-                        : 'rgba(255,255,255,0.85)';
-                } else {
-                    ctx.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.75)';
-                }
-            } else {
-                ctx.strokeStyle = boxBorderColor;
-            }
-
-            ctx.strokeRect(Math.floor(box.x) + 0.5, Math.floor(box.y) + 0.5, Math.floor(box.w), Math.floor(box.h));
-        });
-
+        ctx.strokeRect(Math.floor(cell.x) + 0.5, Math.floor(cell.y) + 0.5, Math.floor(cell.w), Math.floor(cell.h));
         ctx.restore();
-    }
+      }
 
-    // Tipografi Kolom Kotak
-    if (showBoxTypography) {
+      // 3. Typography & Arrows
+      if (showBoxTypography && cell.w >= 22 * relScale && cell.h >= 13 * relScale) {
         ctx.save();
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
-        const labeledBoxes = [];
-        cutoutCardPass.forEach(card => labeledBoxes.push({ ...card, isCard: true }));
-        stretchPass.forEach(box => {
-            if (box.w >= 26 * relScale && box.h >= 16 * relScale) {
-                labeledBoxes.push({ ...box, isCard: false });
-            }
-        });
-        if (showIntactBoxBorders) {
-            normalPass.forEach(box => {
-                if (box.inCluster && (box.type === 'intact' || box.type === 'hero') && box.w >= 26 * relScale && box.h >= 16 * relScale) {
-                    labeledBoxes.push({ ...box, isCard: false, isIntact: true });
-                }
-            });
+        let arrowChar = '';
+        if (showDirectionArrows || boxNumberFormat === 'arrows') {
+          if (cell.mode === 'slit_v') arrowChar = '↓';
+          else if (cell.mode === 'slit_h') arrowChar = '→';
         }
 
-        labeledBoxes.sort((a, b) => {
-            if (Math.abs(a.y - b.y) > 30 * relScale) return a.y - b.y;
-            return a.x - b.x;
-        });
+        let numDisplay = `${cell.num}${arrowChar}`;
+        if (boxNumberFormat === 'pad') numDisplay = `${cell.num < 10 ? '0' : ''}${cell.num}${arrowChar}`;
+        else if (boxNumberFormat === 'plus') numDisplay = `${cell.num}+`;
 
-        const fontScale = boxFontSize / 100;
-        const mainFontSize = Math.max(8, Math.floor(12 * relScale * fontScale));
-        const subFontSize = Math.max(7, Math.floor(9.5 * relScale * fontScale));
-        const padX = Math.max(3, Math.floor(4 * relScale));
-        const padY = Math.max(2, Math.floor(3 * relScale));
-        const currentFontFamily = fontFamilies[boxFontFamily] || fontFamilies['sans'];
+        let textFill = (cell.mode === 'card')
+          ? getContrastTextColor(cell.cardColor || cutoutCardColor)
+          : (isDarkMode ? '#FFFFFF' : '#000000');
 
-        let indexCounter = 1;
+        ctx.fillStyle = textFill;
+        ctx.font = `800 ${mainFontSize}px ${currentFontFamily}`;
 
-        labeledBoxes.forEach((box, idx) => {
-            const word = aiWords[idx % aiWords.length] || 'GRID';
-            
-            let arrowChar = '';
-            if (showDirectionArrows || boxNumberFormat === 'arrows') {
-                if (box.type === 'slit_v' || box.isHoriz === false) arrowChar = '↓';
-                else if (box.type === 'slit_h' || box.isHoriz === true) arrowChar = '→';
-                else if (box.cardArrow) arrowChar = box.cardArrow;
-                else if (box.isCard && (idx % 3 === 0)) arrowChar = (idx % 2 === 0 ? '→' : '↓');
-            }
+        let renderWord = cell.word || 'SPECIMEN';
+        const maxTextW = cell.w - padX * 2;
+        if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
+          renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
+        }
+        ctx.fillText(renderWord, Math.floor(cell.x + padX), Math.floor(cell.y + padY));
 
-            let numDisplay;
-            if (boxNumberFormat === 'arrows') {
-                numDisplay = `${indexCounter}${arrowChar}`;
-            } else if (boxNumberFormat === 'plus') {
-                numDisplay = indexCounter === 1 ? '1' : `${indexCounter}+`;
-            } else if (boxNumberFormat === 'pad') {
-                numDisplay = String(indexCounter).padStart(2, '0');
-            } else {
-                numDisplay = `${indexCounter}${arrowChar}`;
-            }
-
-            let textFill;
-            if (box.isCard) {
-                textFill = getContrastTextColor(cutoutCardColor);
-            } else {
-                textFill = isDarkMode ? '#FFFFFF' : '#000000';
-            }
-
-            ctx.fillStyle = textFill;
-
-            ctx.font = `800 ${mainFontSize}px ${currentFontFamily}`;
-            const maxTextW = box.w - padX * 2;
-            let renderWord = word;
-            if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
-                renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
-            }
-            ctx.fillText(renderWord, Math.floor(box.x + padX), Math.floor(box.y + padY));
-
-            if (box.h >= (mainFontSize + subFontSize + padY * 2)) {
-                ctx.font = `700 ${subFontSize}px ${currentFontFamily}`;
-                ctx.fillText(numDisplay, Math.floor(box.x + padX), Math.floor(box.y + padY + mainFontSize + Math.floor(2 * relScale)));
-            }
-
-            indexCounter += (idx % 3 === 0 ? 1 : (idx % 2 === 0 ? 2 : 3));
-        });
-
-        ctx.restore();
-    }
-
-    if (showGridLines) {
-        ctx.save();
-        ctx.fillStyle = isDarkMode ? '#10B981' : '#000000';
-        ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
-        ctx.strokeStyle = isDarkMode ? 'rgba(16,185,129,0.3)' : 'rgba(0,0,0,0.3)';
-        
-        xCuts.forEach(x => {
-           if(rng() > 0.8) { 
-               ctx.beginPath(); ctx.moveTo(x, bY); ctx.lineTo(x, bY + bH); ctx.stroke(); 
-           }
-        });
-        yCuts.forEach(y => {
-           if(rng() > 0.8) { 
-               ctx.beginPath(); ctx.moveTo(bX, y); ctx.lineTo(bX + bW, y); ctx.stroke(); 
-           }
-        });
-        ctx.restore();
-    }
-
-    if (showTextAnnotations) {
-        ctx.save();
-        ctx.textAlign = 'left';
-        const maxAnnotations = Math.floor(15 * (density/100));
-        let count = 0;
-        const mainFont = Math.max(12, Math.floor(18 * relScale * 0.8));
-        const subFont = Math.max(8, Math.floor(12 * relScale * 0.8));
-        const spacing1 = Math.floor(10 * relScale * 0.8);
-        const spacing2 = Math.floor(5 * relScale * 0.8);
-        const spacing3 = Math.floor(8 * relScale * 0.8);
-        const barWidth = Math.floor(45 * relScale * 0.8);
-        const barHeight = Math.max(1, Math.floor(2 * relScale * 0.8));
-
-        for (let j = 5; j < yCuts.length - 5; j+=2) {
-            if (count >= maxAnnotations) break;
-            if (rng() > 0.7) {
-                const y = yCuts[j];
-                const x = xCuts[Math.floor(rng() * (xCuts.length - 5)) + 2];
-                
-                const word = aiWords[Math.floor(rng() * aiWords.length)];
-                const num = Math.floor(rng() * 50) + 1;
-                
-                ctx.fillStyle = textColor;
-                ctx.font = `900 ${mainFont}px sans-serif`;
-                ctx.fillText(word, x, y - spacing1);
-                ctx.font = `${subFont}px sans-serif`;
-                ctx.fillText(`${num}+`, x, y + spacing2);
-                ctx.fillRect(x, y + spacing3, barWidth, barHeight);
-                count++;
-            }
+        if (cell.h >= (mainFontSize + subFontSize + padY * 2)) {
+          ctx.font = `700 ${subFontSize}px ${currentFontFamily}`;
+          ctx.fillText(numDisplay, Math.floor(cell.x + padX), Math.floor(cell.y + padY + mainFontSize + Math.floor(2 * relScale)));
         }
         ctx.restore();
+      }
+    });
+
+    // 4. Interactive Selection & Hover Highlights (Manual Mode)
+    if (engineMode === 'manual') {
+      if (hoveredCellId) {
+        const hoveredCell = gridCells.find(c => c.id === hoveredCellId);
+        if (hoveredCell) {
+          ctx.save();
+          ctx.strokeStyle = '#00FFFF';
+          ctx.lineWidth = Math.max(1.5, 1.5 * relScale);
+          ctx.setLineDash([4, 4]);
+          ctx.strokeRect(hoveredCell.x + 0.5, hoveredCell.y + 0.5, hoveredCell.w, hoveredCell.h);
+          ctx.restore();
+        }
+      }
+      if (selectedCellId) {
+        const selCell = gridCells.find(c => c.id === selectedCellId);
+        if (selCell) {
+          ctx.save();
+          ctx.strokeStyle = '#10B981';
+          ctx.lineWidth = Math.max(2, 2 * relScale);
+          ctx.strokeRect(selCell.x + 0.5, selCell.y + 0.5, selCell.w, selCell.h);
+          // Corner handles
+          ctx.fillStyle = '#10B981';
+          const hs = 6;
+          ctx.fillRect(selCell.x - hs/2, selCell.y - hs/2, hs, hs);
+          ctx.fillRect(selCell.x + selCell.w - hs/2, selCell.y - hs/2, hs, hs);
+          ctx.fillRect(selCell.x - hs/2, selCell.y + selCell.h - hs/2, hs, hs);
+          ctx.fillRect(selCell.x + selCell.w - hs/2, selCell.y + selCell.h - hs/2, hs, hs);
+          ctx.restore();
+        }
+      }
     }
 
-    if (isImageLocked) {
-        ctx.restore();
-    }
+    ctx.filter = 'none';
   }, [
-    image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY,
-    showScratchBoxes, showBoxTypography, showCutoutCards, boxBorderWidth, boxBorderColor, boxSizeVariety,
-    cutoutCardColor, cutoutCardOpacity, cutoutCardDensity, boxFontFamily, boxNumberFormat, boxFontSize,
-    showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat,
-    gridBoundsMode, imageOffsetX, imageOffsetY, stretchBalance,
-    clusterLayout, showIntactBoxBorders, showDirectionArrows, outerFramingCards, heroBreakout
+    image, rotation, canvasFormat, brutalInt, isDarkMode, scale, imageOffsetX, imageOffsetY,
+    gridBoundsMode, renderStyle, boxBorderWidth, boxBorderColor, showScratchBoxes, showBoxTypography,
+    boxFontSize, boxFontFamily, showDirectionArrows, boxNumberFormat, cutoutCardColor, cutoutCardOpacity,
+    gridCells, hoveredCellId, selectedCellId, engineMode
   ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
@@ -1410,48 +1273,67 @@ export default function App() {
           )}
         </div>
 
-        {/* Quick Presets Bar (Tengah) */}
-        <div className="hidden lg:flex items-center space-x-1.5 p-1 rounded-xl border bg-opacity-60 backdrop-blur-sm" style={{ backgroundColor: isDarkMode ? '#141414' : '#f3f4f6', borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
-          {/* Kelompok Swiss Specimen */}
+        {/* Quick Presets & Engine Mode Bar (Tengah) */}
+        <div className="hidden lg:flex items-center space-x-2 p-1 rounded-xl border bg-opacity-60 backdrop-blur-sm" style={{ backgroundColor: isDarkMode ? '#141414' : '#f3f4f6', borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+          {/* Mode Switcher */}
           <div className="flex items-center space-x-1 pr-1.5 border-r" style={{ borderColor: isDarkMode ? '#262626' : '#e0e0e0' }}>
-            <span className={`text-[9.5px] font-extrabold uppercase tracking-wider px-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>🔬 Specimen:</span>
-            {[
-              { id: 'cat_diagonal', label: '🐱 Cat', shortcut: '1' },
-              { id: 'goldfish_axial', label: '🐠 Fish', shortcut: '2' },
-              { id: 'flamingo_column', label: '🦩 Flamingo', shortcut: '3' },
-              { id: 'fish_skeleton', label: '🦴 Spine', shortcut: '4' }
-            ].map(p => (
-              <button
-                key={p.id}
-                onClick={() => applyPreset(p.id)}
-                className={`px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
-                title={`Preset Spesimen Anatomi: ${p.label} (Tombol ${p.shortcut})`}
-              >
-                <span>{p.label}</span>
-                <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
-              </button>
-            ))}
+            <button
+              onClick={() => setEngineMode('auto')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1 cursor-pointer ${engineMode === 'auto' ? (isDarkMode ? 'bg-emerald-500 text-black shadow' : 'bg-white text-emerald-800 shadow') : (isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black')}`}
+            >
+              <span>🤖</span>
+              <span>Otomatis</span>
+            </button>
+            <button
+              onClick={() => { setEngineMode('manual'); setActiveTool('brush'); }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all flex items-center space-x-1 cursor-pointer ${engineMode === 'manual' ? (isDarkMode ? 'bg-cyan-400 text-black shadow' : 'bg-white text-cyan-800 shadow') : (isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black')}`}
+            >
+              <span>✍️</span>
+              <span>Manual</span>
+            </button>
           </div>
 
-          {/* Kelompok Klasik */}
-          <div className="flex items-center space-x-1 pl-0.5">
-            {[
-              { id: 'editorial', label: '📰 Edit', shortcut: '5' },
-              { id: 'cyber', label: '⚡ Cyber', shortcut: '6' },
-              { id: 'zine', label: '📄 Zine', shortcut: '7' },
-              { id: 'minimal', label: '🎛️ Raw', shortcut: '8' }
-            ].map(p => (
-              <button
-                key={p.id}
-                onClick={() => applyPreset(p.id)}
-                className={`px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
-                title={`Preset Klasik: ${p.label} (Tombol ${p.shortcut})`}
-              >
-                <span>{p.label}</span>
-                <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
-              </button>
-            ))}
-          </div>
+          {/* Jika Mode Otomatis: Tampilkan Preset Cepat & Tombol Re-generate */}
+          {engineMode === 'auto' ? (
+            <div className="flex items-center space-x-1">
+              {[
+                { id: 'specimen_bento', label: '🍱 Bento', shortcut: '1' },
+                { id: 'specimen_axial', label: '🔬 Aksial', shortcut: '2' },
+                { id: 'specimen_ribbon', label: '🌊 Ribbon', shortcut: '3' },
+                { id: 'editorial', label: '📰 Edit', shortcut: '4' }
+              ].map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p.id)}
+                  className={`px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1 cursor-pointer ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
+                  title={`Preset ${p.label} (Shortcut: ${p.shortcut})`}
+                >
+                  <span>{p.label}</span>
+                  <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* Jika Mode Manual: Tampilkan Kuas Cepat */
+            <div className="flex items-center space-x-1">
+              <span className={`text-[9.5px] font-bold uppercase tracking-wider px-1 ${isDarkMode ? 'text-cyan-400' : 'text-cyan-700'}`}>Kuas:</span>
+              {[
+                { role: 'slit_v', label: '↓ Slit V' },
+                { role: 'slit_h', label: '→ Slit H' },
+                { role: 'card', label: '🗂️ Card' },
+                { role: 'intact', label: '🖼️ Intact' },
+                { role: 'breakout', label: '✂️ Break' }
+              ].map(b => (
+                <button
+                  key={b.role}
+                  onClick={() => { setManualBrushRole(b.role); setActiveTool('brush'); }}
+                  className={`px-2 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${manualBrushRole === b.role ? (isDarkMode ? 'bg-cyan-400 text-black shadow' : 'bg-cyan-700 text-white shadow') : (isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-gray-600 hover:text-black hover:bg-white')}`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action Controls Kanan */}
@@ -1553,48 +1435,247 @@ export default function App() {
             {activeTab === 'boxes' && (
               <div className="space-y-4 animate-in fade-in duration-150">
                 
-                {/* 0. POLA KLASTER SPESIMEN ANATOMI (SWISS BIO-ARCHIVE) */}
-                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                {/* 0. MESIN PEMROSESAN GRID SPESIMEN (AUTO & MANUAL) */}
+                <div className={`p-3.5 rounded-xl border space-y-3.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
                   <div>
-                    <div className="text-xs font-bold flex items-center space-x-1.5">
-                      <span>🔬</span>
-                      <span>Pola Klaster Anatomi (Swiss Specimen)</span>
+                    <div className="text-xs font-bold flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5">
+                        <span>🔬</span>
+                        <span>Mesin Pemrosesan Grid Spesimen</span>
+                      </div>
+                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${engineMode === 'auto' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'}`}>
+                        {engineMode === 'auto' ? '🤖 Otomatis' : '✍️ Manual'}
+                      </span>
                     </div>
                     <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Bentuk susunan grid mengikuti kontur gestur & anatomi subjek
+                      Logika partisi bento asimetris & peran pemrosesan sel mandiri
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: 'full', label: '📐 Full Grid', desc: 'Standar persegi penuh' },
-                      { id: 'stepped_diagonal', label: '🐱 Tangga Diagonal', desc: 'Gaya Kucing Melompat' },
-                      { id: 'anatomical_cross', label: '🐠 Silang Aksial', desc: 'Gaya Ikan Mas' },
-                      { id: 'columnar_t', label: '🦩 Tiang Vertikal', desc: 'Gaya Flamingo T-Frame' },
-                      { id: 'horizontal_spine', label: '🦴 Spine Tulang', desc: 'Gaya Tulang Ikan' }
-                    ].map(layout => (
-                      <button
-                        key={layout.id}
-                        onClick={() => setClusterLayout(layout.id)}
-                        className={`p-2 text-left rounded-lg border transition-all ${clusterLayout === layout.id ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-400 text-emerald-400 font-bold ring-1 ring-emerald-400/40 shadow-sm' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold shadow-sm') : (isDarkMode ? 'bg-[#181818] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
-                      >
-                        <div className="text-[10px] font-bold">{layout.label}</div>
-                        <div className="text-[8px] opacity-70">{layout.desc}</div>
-                      </button>
-                    ))}
+                  {/* Mode Operasi Toggle */}
+                  <div className="flex p-1 rounded-lg border" style={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#e5e7eb', borderColor: isDarkMode ? '#282828' : '#d1d5db' }}>
+                    <button
+                      onClick={() => setEngineMode('auto')}
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${engineMode === 'auto' ? (isDarkMode ? 'bg-emerald-500 text-black shadow' : 'bg-white text-emerald-800 shadow') : (isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black')}`}
+                    >
+                      <span>🤖</span>
+                      <span>Mode Otomatis</span>
+                    </button>
+                    <button
+                      onClick={() => { setEngineMode('manual'); setActiveTool('brush'); }}
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${engineMode === 'manual' ? (isDarkMode ? 'bg-cyan-400 text-black shadow' : 'bg-white text-cyan-800 shadow') : (isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-black')}`}
+                    >
+                      <span>✍️</span>
+                      <span>Mode Manual</span>
+                    </button>
                   </div>
 
-                  {/* Kontrol Spesimen Lanjutan */}
-                  {clusterLayout !== 'full' && (
-                    <div className="space-y-2 pt-2 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
-                      <label className="flex items-center justify-between cursor-pointer">
-                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Bebaskan Kepala/Wajah (Hero Breakout)</span>
-                        <input type="checkbox" checked={heroBreakout} onChange={(e) => setHeroBreakout(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
-                      </label>
-                      <label className="flex items-center justify-between cursor-pointer">
-                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Kartu Putih Pembingkai Luar (Perimeter)</span>
-                        <input type="checkbox" checked={outerFramingCards} onChange={(e) => setOuterFramingCards(e.target.checked)} className="w-4 h-4 accent-amber-500" />
-                      </label>
+                  {/* --- KONTROL MODE OTOMATIS --- */}
+                  {engineMode === 'auto' && (
+                    <div className="space-y-3 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      {/* Gaya Partisi Bento */}
+                      <div>
+                        <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Algoritma Partisi Ruang:
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { id: 'bento', label: '🍱 Bento Asimetris', desc: 'Kuadran hierarkis' },
+                            { id: 'mondrian', label: '📐 Mondrian Aksial', desc: 'Rasio emas & cross' },
+                            { id: 'stripes', label: '🌊 Strip Aliran', desc: 'Irisan pita dinamis' },
+                            { id: 'regular', label: '▦ Grid Reguler', desc: 'Kisi proporsional' }
+                          ].map(style => (
+                            <button
+                              key={style.id}
+                              onClick={() => setGridPartitionStyle(style.id)}
+                              className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${gridPartitionStyle === style.id ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-400 text-emerald-400 font-bold ring-1 ring-emerald-400/40 shadow-sm' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold shadow-sm') : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
+                            >
+                              <div className="text-[10px] font-bold">{style.label}</div>
+                              <div className="text-[8px] opacity-70">{style.desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Slider Keseimbangan Aliran Slit (H ↔ V) */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span>Keseimbangan Aliran Slit (H ↔ V)</span>
+                          <span className="font-mono text-cyan-400">{stretchBalance}H / {100 - stretchBalance}V</span>
+                        </div>
+                        <input
+                          type="range" min="0" max="100" value={stretchBalance}
+                          onChange={(e) => setStretchBalance(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                        />
+                      </div>
+
+                      {/* Slider Ambang Breakout Subjek */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span>Ambang Breakout Subjek (Wajah/Ujung Bebas)</span>
+                          <span className="font-mono text-emerald-400">{heroBreakoutThreshold}%</span>
+                        </div>
+                        <input
+                          type="range" min="0" max="100" value={heroBreakoutThreshold}
+                          onChange={(e) => setHeroBreakoutThreshold(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+
+                      {/* Slider Kepadatan Kartu Spesimen Solid */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span>Kepadatan Kartu Spesimen Solid</span>
+                          <span className="font-mono text-amber-400">{cutoutCardDensity}%</span>
+                        </div>
+                        <input
+                          type="range" min="0" max="50" value={cutoutCardDensity}
+                          onChange={(e) => setCutoutCardDensity(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                        />
+                      </div>
+
+                      {/* Slider Rasio Sel Foto Utuh (Intact Photo) */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span>Rasio Sel Foto Asli Utuh</span>
+                          <span className="font-mono text-emerald-400">{intactCellRatio}%</span>
+                        </div>
+                        <input
+                          type="range" min="0" max="50" value={intactCellRatio}
+                          onChange={(e) => setIntactCellRatio(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+
+                      {/* Tombol Acak / Re-generate */}
+                      <button
+                        onClick={handleRandomize}
+                        className="w-full py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs flex items-center justify-center space-x-2 shadow-md transition-all active:scale-98 cursor-pointer"
+                      >
+                        <span>🔀</span>
+                        <span>Buat Variasi Struktur Baru (Re-generate)</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* --- KONTROL MODE MANUAL --- */}
+                  {engineMode === 'manual' && (
+                    <div className="space-y-3 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      <div>
+                        <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Pilih Peran Kuas (Klik/Usap Sel di Kanvas):
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { role: 'slit_v', label: '↓ Slit Vertikal', desc: 'Tarik garis vertikal', color: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10' },
+                            { role: 'slit_h', label: '→ Slit Horizontal', desc: 'Tarik garis horizontal', color: 'text-blue-400 border-blue-500/40 bg-blue-500/10' },
+                            { role: 'card', label: '🗂️ Kartu Solid', desc: 'Kartu putih spesimen', color: 'text-amber-400 border-amber-500/40 bg-amber-500/10' },
+                            { role: 'intact', label: '🖼️ Foto Utuh', desc: 'Foto asli berbingkai', color: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' },
+                            { role: 'breakout', label: '✂️ Breakout (Hapus)', desc: 'Bebas tembus kanvas', color: 'text-rose-400 border-rose-500/40 bg-rose-500/10' }
+                          ].map(item => (
+                            <button
+                              key={item.role}
+                              onClick={() => { setManualBrushRole(item.role); setActiveTool('brush'); }}
+                              className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${manualBrushRole === item.role ? `${item.color} font-bold ring-1 shadow-sm` : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
+                            >
+                              <div className="text-[10px] font-bold">{item.label}</div>
+                              <div className="text-[8px] opacity-70">{item.desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Slider Ukuran Kuas */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <span>Radius Usapan Kuas</span>
+                          <span className="font-mono text-cyan-400">{brushSize}px</span>
+                        </div>
+                        <input
+                          type="range" min="15" max="150" value={brushSize}
+                          onChange={(e) => setBrushSize(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                        />
+                      </div>
+
+                      {/* Editor Sel Terpilih */}
+                      {selectedCellId && (() => {
+                        const sel = gridCells.find(c => c.id === selectedCellId);
+                        if (!sel) return null;
+                        return (
+                          <div className={`p-2.5 rounded-lg border space-y-2 ${isDarkMode ? 'bg-[#1a1a1a] border-emerald-500/40' : 'bg-emerald-50/50 border-emerald-300'}`}>
+                            <div className="flex items-center justify-between text-[10px] font-bold">
+                              <span className="text-emerald-400">Sel #{sel.num} Terpilih</span>
+                              <button onClick={() => setSelectedCellId(null)} className="text-gray-400 hover:text-white text-xs">✕</button>
+                            </div>
+                            <div className="flex space-x-1">
+                              {[
+                                { id: 'slit_v', label: '↓ V' },
+                                { id: 'slit_h', label: '→ H' },
+                                { id: 'card', label: '🗂️' },
+                                { id: 'intact', label: '🖼️' },
+                                { id: 'breakout', label: '✂️' }
+                              ].map(m => (
+                                <button
+                                  key={m.id}
+                                  onClick={() => setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, mode: m.id } : c))}
+                                  className={`flex-1 py-1 text-[9.5px] font-bold rounded border ${sel.mode === m.id ? 'bg-emerald-500 text-black border-emerald-400' : (isDarkMode ? 'bg-[#222] text-gray-300 border-[#333]' : 'bg-white text-gray-700 border-gray-300')}`}
+                                >
+                                  {m.label}
+                                </button>
+                              ))}
+                            </div>
+                            <div>
+                              <div className="text-[9px] font-semibold text-gray-400 mb-0.5">Edit Kata Label:</div>
+                              <input
+                                type="text"
+                                value={sel.word || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value.toUpperCase();
+                                  setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, word: val } : c));
+                                }}
+                                className={`w-full px-2 py-1 text-xs font-mono font-bold rounded border uppercase ${isDarkMode ? 'bg-[#121212] border-[#333] text-white' : 'bg-white border-gray-300 text-black'}`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Tombol Aksi Cepat Massal */}
+                      <div className="grid grid-cols-2 gap-1 pt-1">
+                        <button
+                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: 'intact' }))); showToast('Semua sel diubah ke Foto Utuh'); }}
+                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                        >
+                          Semua Foto Utuh 🖼️
+                        </button>
+                        <button
+                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: c.w > c.h ? 'slit_h' : 'slit_v' }))); showToast('Semua sel diubah ke Slit-Scan'); }}
+                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                        >
+                          Semua Slit-Scan 🌊
+                        </button>
+                        <button
+                          onClick={() => {
+                            setGridCells(prev => prev.map(c => {
+                              const isEdge = c.col === 0 || c.row === 0;
+                              return isEdge ? { ...c, mode: 'card' } : c;
+                            }));
+                            showToast('Tepi luar diubah ke Kartu Putih');
+                          }}
+                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                        >
+                          Tepi Jadi Kartu 🗂️
+                        </button>
+                        <button
+                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: 'breakout' }))); showToast('Grid dikosongkan (Breakout)'); }}
+                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-rose-400 hover:text-rose-300' : 'bg-white border-gray-200 text-rose-700 hover:bg-rose-50'}`}
+                        >
+                          Kosongkan Grid ✂️
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2329,7 +2410,7 @@ export default function App() {
               <div 
                 style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${viewScale})`, transformOrigin: 'center' }}
                 className={`w-full h-full flex items-center justify-center transition-transform duration-75
-                            ${currentTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (currentTool === 'brush' && isManualMode ? 'cursor-none' : 'cursor-crosshair')}`}
+                            ${activeTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (activeTool === 'brush' ? 'cursor-crosshair' : 'cursor-default')}`}
               >
                 <canvas ref={canvasRef} className={`shadow-[0_0_60px_rgba(0,0,0,0.6)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
               </div>
@@ -2349,26 +2430,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Feedback Visual Kursor Brush di Kanvas */}
-          {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
-            <div
-                className="fixed rounded-full pointer-events-none z-[9999] flex items-center justify-center"
-                style={{
-                    left: mousePos.x,
-                    top: mousePos.y,
-                    width: brushSize,
-                    height: brushSize,
-                    transform: 'translate(-50%, -50%)',
-                    border: brushTarget === 'card' ? '2px solid #FACC15' : '2px solid #00FFFF', 
-                    backgroundColor: brushTarget === 'card' ? 'rgba(250, 204, 21, 0.2)' : 'rgba(0, 255, 255, 0.15)'
-                }}
-            >
-               <span className="text-[9px] font-bold px-1 rounded shadow" style={{ backgroundColor: brushTarget === 'card' ? '#FACC15' : '#00FFFF', color: '#000000' }}>
-                 {brushTarget === 'card' ? 'CARD' : 'STRETCH'}
-               </span>
-            </div>
-          )}
-
           {/* --- FLOATING CANVAS DOCK (CANVA / FIGMA STYLE BOTTOM CENTER) --- */}
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40">
             <div className={`backdrop-blur-xl border rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 transition-colors ${isDarkMode ? 'bg-[#121212]/90 border-[#282828] text-gray-300' : 'bg-white/95 border-gray-200 text-gray-700'}`}>
@@ -2384,9 +2445,15 @@ export default function App() {
 
               {/* Tool: Brush */}
               <button 
-                className={`p-2 rounded-xl transition flex items-center justify-center ${activeTool === 'brush' && isManualMode ? (brushTarget === 'card' ? 'bg-amber-400 text-black shadow' : 'bg-cyan-400 text-black shadow') : (isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100')}`}
-                onClick={() => { setActiveTool('brush'); setIsManualMode(true); setActiveTab('brush'); }} 
-                title="Brush Tool (Lukis Kartu / Stretch) [Shortcut: B]"
+                className={`p-2 rounded-xl transition flex items-center justify-center ${activeTool === 'brush' ? 'bg-cyan-400 text-black shadow' : (isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100')}`}
+                onClick={() => { 
+                  setActiveTool('brush'); 
+                  setEngineMode('manual'); 
+                  setIsManualMode(true); 
+                  setActiveTab('grid'); 
+                  showToast(`Brush aktif: mode ${manualBrushRole.toUpperCase()}`);
+                }} 
+                title="Brush Lukis Sel [Shortcut: B]"
               >
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
               </button>
