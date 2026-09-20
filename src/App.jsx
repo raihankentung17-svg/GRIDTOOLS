@@ -687,11 +687,13 @@ const getInitialApiKey = () => {
     setIsAiAnalyzing(true);
 
     try {
-      const apiKey = (apiKeyInput || '').trim();
+      const apiKey = (apiKeyInput || '').trim() || getInitialApiKey();
       let words = [];
       let sourceName = '';
 
-      if (apiKey && !forceLocal) {
+      const isManualLocal = forceLocal === true;
+
+      if (apiKey && !isManualLocal) {
         const tempCanvas = document.createElement('canvas');
         const MAX_SIZE = 600;
         let w = image.width;
@@ -714,13 +716,12 @@ const getInitialApiKey = () => {
 
         // 1. Dukungan Model Resmi Aktif 2026 (Diurutkan dari model teruji paling responsif)
         const candidateModels2026 = [
+          'gemini-flash-latest',
+          'gemini-flash-lite-latest',
           'gemini-3.5-flash-lite',
           'gemini-3.6-flash',
           'gemini-3.7-flash',
-          'gemini-3.8-flash',
-          'gemini-3.5-flash',
-          'gemini-2.5-flash',
-          'gemini-2.5-pro'
+          'gemini-3.8-flash'
         ];
 
         let modelsToTry = [...candidateModels2026];
@@ -750,7 +751,7 @@ const getInitialApiKey = () => {
         for (const modelName of modelsToTry) {
           try {
             const resp = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -787,6 +788,7 @@ const getInitialApiKey = () => {
                   words = parsed.slice(0, 16);
                   const cleanModelName = modelName
                     .replace('gemini-', 'Google Gemini ')
+                    .replace('-latest', ' (Terbaru)')
                     .replace('-flash', ' Flash')
                     .replace('-pro', ' Pro')
                     .replace('-lite', ' Lite');
@@ -2136,7 +2138,7 @@ const getInitialApiKey = () => {
                   </div>
 
                   <button 
-                    onClick={handleAiAnalysis} 
+                    onClick={() => handleAiAnalysis()} 
                     disabled={isAiAnalyzing || !image} 
                     className={`w-full py-2.5 rounded-xl text-xs font-bold transition shadow flex items-center justify-center space-x-2 ${isAiAnalyzing || !image ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-300' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black active:scale-95'}`}
                   >
