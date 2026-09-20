@@ -251,6 +251,789 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
     );
 };
 
+// --- HELPER WARNA & TIPOGRAFI GLOBAL ---
+const hexToRgba = (hex, opacityPercent) => {
+  if (!hex) return '#FFFFFF';
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const r = parseInt(c.substring(0, 2), 16) || 255;
+  const g = parseInt(c.substring(2, 4), 16) || 255;
+  const b = parseInt(c.substring(4, 6), 16) || 255;
+  const alpha = Math.max(0, Math.min(1, opacityPercent / 100));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const getContrastTextColor = (hex) => {
+  if (!hex) return '#000000';
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(x => x + x).join('');
+  const r = parseInt(c.substring(0, 2), 16) || 255;
+  const g = parseInt(c.substring(2, 4), 16) || 255;
+  const b = parseInt(c.substring(4, 6), 16) || 255;
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return yiq >= 128 ? '#000000' : '#FFFFFF';
+};
+
+const fontFamilies = {
+  'sans': '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  'mono': '"JetBrains Mono", "SF Mono", "Courier New", Courier, monospace',
+  'serif': '"Playfair Display", "Times New Roman", Georgia, serif',
+  'grotesk': '"Arial Black", Impact, "Helvetica Neue", sans-serif',
+  'condensed': '"Arial Narrow", "Trebuchet MS", sans-serif'
+};
+
+// --- KOMPONEN KONTROL MODE MANUAL DEDIKASI (INDEPENDENT BRUSH & PRECISION PLACEMENT) ---
+function ManualDedicatedControls({
+  isDarkMode,
+  manualPlacementMode,
+  setManualPlacementMode,
+  manualBrushRole,
+  setManualBrushRole,
+  slitVConfig,
+  setSlitVConfig,
+  slitHConfig,
+  setSlitHConfig,
+  cardConfig,
+  setCardConfig,
+  intactConfig,
+  setIntactConfig,
+  breakoutConfig,
+  setBreakoutConfig,
+  showBoxTypography,
+  setShowBoxTypography,
+  showScratchBoxes,
+  setShowScratchBoxes,
+  clearToCleanSlate,
+  clearStretchMask,
+  clearCardMask,
+  handleRandomize,
+  selectedCellId,
+  setSelectedCellId,
+  gridCells,
+  setGridCells,
+  showToast,
+  setActiveTool
+}) {
+  return (
+    <div className="space-y-3 pt-1">
+      {/* 1. Mode Penempatan: Kanvas Bebas vs Partisi Bento */}
+      <div className={`p-2 rounded-xl border space-y-2 ${isDarkMode ? 'bg-[#151515] border-[#282828]' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex items-center justify-between">
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            Metode Penempatan:
+          </span>
+          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${manualPlacementMode === 'freehand' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+            {manualPlacementMode === 'freehand' ? '✨ Kanvas Bebas' : '🍱 Partisi Bento'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            onClick={() => {
+              setManualPlacementMode('freehand');
+              setActiveTool('brush');
+              showToast('Mode Kanvas Bebas Aktif ✨ Klik untuk menaruh elemen presisi');
+            }}
+            className={`py-1.5 px-2 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center justify-center space-x-1 ${manualPlacementMode === 'freehand' ? (isDarkMode ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : 'bg-cyan-700 text-white border-cyan-700 shadow-sm') : (isDarkMode ? 'bg-[#1e1e1e] border-[#303030] text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100')}`}
+          >
+            <span>✨</span>
+            <span>Kanvas Bebas (Murni)</span>
+          </button>
+          <button
+            onClick={() => {
+              setManualPlacementMode('bento');
+              setActiveTool('brush');
+              showToast('Mode Partisi Bento Aktif 🍱 Klik/usap kisi bento');
+            }}
+            className={`py-1.5 px-2 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center justify-center space-x-1 ${manualPlacementMode === 'bento' ? (isDarkMode ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm' : 'bg-emerald-700 text-white border-emerald-700 shadow-sm') : (isDarkMode ? 'bg-[#1e1e1e] border-[#303030] text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100')}`}
+          >
+            <span>🍱</span>
+            <span>Partisi Bento Grid</span>
+          </button>
+        </div>
+
+        <div className="text-[8.5px] leading-relaxed opacity-75 px-0.5">
+          {manualPlacementMode === 'freehand'
+            ? '✨ Klik di kanvas langsung menaruh pita slit atau kartu spesimen berukuran presisi di bawah kursor.'
+            : '🍱 Mengubah atau mengusap peran sel yang ada di kisi partisi bento.'}
+        </div>
+
+        {/* Tombol Aksi Cepat Kanvas */}
+        <div className="grid grid-cols-2 gap-1 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#282828' : '#e5e7eb' }}>
+          <button
+            onClick={clearToCleanSlate}
+            className={`py-1.5 px-2 rounded-lg text-[9.5px] font-bold border transition-all cursor-pointer flex items-center justify-center space-x-1 ${isDarkMode ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100'}`}
+            title="Kosongkan seluruh grid untuk mulai dari foto asli murni"
+          >
+            <span>🧹</span>
+            <span>Mulai dari Kanvas Bersih ✨</span>
+          </button>
+          <button
+            onClick={() => {
+              setManualPlacementMode('bento');
+              handleRandomize();
+              showToast('Partisi Bento Baru Dibuat 🍱');
+            }}
+            className={`py-1.5 px-2 rounded-lg text-[9.5px] font-bold border transition-all cursor-pointer flex items-center justify-center space-x-1 ${isDarkMode ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+            title="Buat partisi bento baru secara otomatis"
+          >
+            <span>🍱</span>
+            <span>Partisi Bento Baru 🔀</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Pilihan 5 Peran Kuas dengan Ukuran Dedikasi */}
+      <div>
+        <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          Pilih Peran Kuas ({manualPlacementMode === 'freehand' ? 'Klik Taruh di Kanvas' : 'Usap Sel Bento'}):
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {[
+            {
+              role: 'slit_v',
+              label: '↓ Slit Vertikal',
+              sizeStr: `${slitVConfig.width}px`,
+              desc: 'Pita vertikal presisi',
+              color: 'text-cyan-400 border-cyan-500/50 bg-cyan-500/10 ring-cyan-400'
+            },
+            {
+              role: 'slit_h',
+              label: '→ Slit Horizontal',
+              sizeStr: `${slitHConfig.height}px`,
+              desc: 'Pita horizontal presisi',
+              color: 'text-blue-400 border-blue-500/50 bg-blue-500/10 ring-blue-400'
+            },
+            {
+              role: 'card',
+              label: '🗂️ Kartu Solid',
+              sizeStr: `${cardConfig.width}×${cardConfig.height}`,
+              desc: 'Kartu spesimen arsip',
+              color: 'text-amber-400 border-amber-500/50 bg-amber-500/10 ring-amber-400'
+            },
+            {
+              role: 'intact',
+              label: '🖼️ Foto Utuh',
+              sizeStr: `${intactConfig.radius}px`,
+              desc: 'Pulihkan foto murni',
+              color: 'text-emerald-400 border-emerald-500/50 bg-emerald-500/10 ring-emerald-400'
+            },
+            {
+              role: 'breakout',
+              label: '✂️ Breakout (Hapus)',
+              sizeStr: `${breakoutConfig.radius}px`,
+              desc: 'Hapus distorsi/kartu',
+              color: 'text-rose-400 border-rose-500/50 bg-rose-500/10 ring-rose-400'
+            }
+          ].map(item => (
+            <button
+              key={item.role}
+              onClick={() => {
+                setManualBrushRole(item.role);
+                setActiveTool('brush');
+                showToast(`Peran Kuas: ${item.label}`);
+              }}
+              className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${manualBrushRole === item.role ? `${item.color} font-bold ring-1 shadow-sm` : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold">{item.label}</span>
+                <span className="text-[8.5px] font-mono opacity-80">{item.sizeStr}</span>
+              </div>
+              <div className="text-[8px] opacity-70 mt-0.5">{item.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Panel Konfigurasi Khusus Per Peran Kuas (DEDICATED CONTROLS) */}
+
+      {/* A. DEDICATED SLIT VERTICAL CONTROLS */}
+      {manualBrushRole === 'slit_v' && (
+        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161b22] border-cyan-500/40' : 'bg-cyan-50/60 border-cyan-300'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-cyan-400' : 'text-cyan-800'}`}>
+              🌊 Pengaturan Pita Slit Vertikal
+            </span>
+            <span className="text-[9.5px] font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-500/40 px-1.5 py-0.5 rounded">
+              Lebar: {slitVConfig.width}px
+            </span>
+          </div>
+
+          {/* Slider Lebar Pita Slit Vertikal */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Lebar Pita Slit (Piksel Presisi):</span>
+              <span className="font-mono text-cyan-400 font-bold">{slitVConfig.width}px</span>
+            </div>
+            <input
+              type="range" min="10" max="250" value={slitVConfig.width}
+              onChange={(e) => setSlitVConfig(prev => ({ ...prev, width: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+            {/* Tombol Preset Lebar Cepat */}
+            <div className="grid grid-cols-4 gap-1 mt-1.5">
+              {[
+                { w: 18, label: '18px (Slim)' },
+                { w: 36, label: '36px (Sedang)' },
+                { w: 72, label: '72px (Lebar)' },
+                { w: 140, label: '140px (Blok)' }
+              ].map(p => (
+                <button
+                  key={p.w}
+                  onClick={() => setSlitVConfig(prev => ({ ...prev, width: p.w }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.width === p.w ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Jangkauan Vertikal: Penuh vs Lokal */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Jangkauan Bentangan Vertikal:
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                onClick={() => setSlitVConfig(prev => ({ ...prev, reach: 'full' }))}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.reach === 'full' ? 'bg-cyan-500 text-black border-cyan-400' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+              >
+                ↕️ Penuh (Atas-Bawah)
+              </button>
+              <button
+                onClick={() => setSlitVConfig(prev => ({ ...prev, reach: 'local' }))}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.reach === 'local' ? 'bg-cyan-500 text-black border-cyan-400' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+              >
+                📍 Lokal (Tinggi Terbatas)
+              </button>
+            </div>
+            {slitVConfig.reach === 'local' && (
+              <div className="mt-1.5 pt-1.5 border-t border-dashed border-cyan-500/30">
+                <div className="flex justify-between text-[8.5px] text-gray-400 mb-0.5">
+                  <span>Tinggi Pita Lokal:</span>
+                  <span className="font-mono text-cyan-400">{slitVConfig.height || 180}px</span>
+                </div>
+                <input
+                  type="range" min="60" max="500" value={slitVConfig.height || 180}
+                  onChange={(e) => setSlitVConfig(prev => ({ ...prev, height: Number(e.target.value) }))}
+                  className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Kerapatan Irisan Garis (Multi-Stripe) */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Kerapatan Irisan Garis:
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { f: 1, label: '1 Pita' },
+                { f: 2, label: '2 Garis' },
+                { f: 4, label: '4 Halus' },
+                { f: 8, label: 'Barcode' }
+              ].map(item => (
+                <button
+                  key={item.f}
+                  onClick={() => setSlitVConfig(prev => ({ ...prev, frequency: item.f }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.frequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#1f242c] text-gray-400 border-[#2d333b]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Opasitas Slit */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Transparansi Slit:</span>
+              <span className="font-mono text-cyan-400">{slitVConfig.opacity}%</span>
+            </div>
+            <input
+              type="range" min="20" max="100" value={slitVConfig.opacity}
+              onChange={(e) => setSlitVConfig(prev => ({ ...prev, opacity: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
+          </div>
+
+          {/* Toggles Panah & Label */}
+          <div className="flex space-x-1 pt-0.5">
+            <button
+              onClick={() => setSlitVConfig(prev => ({ ...prev, showArrow: !prev.showArrow }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.showArrow ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Panah ↓: {slitVConfig.showArrow ? 'ON' : 'OFF'}
+            </button>
+            <button
+              onClick={() => setSlitVConfig(prev => ({ ...prev, showLabel: !prev.showLabel }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitVConfig.showLabel ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : (isDarkMode ? 'bg-[#1f242c] border-[#2d333b] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Label Teks: {slitVConfig.showLabel ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* B. DEDICATED SLIT HORIZONTAL CONTROLS */}
+      {manualBrushRole === 'slit_h' && (
+        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#161c28] border-blue-500/40' : 'bg-blue-50/60 border-blue-300'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-blue-400' : 'text-blue-800'}`}>
+              🌊 Pengaturan Pita Slit Horizontal
+            </span>
+            <span className="text-[9.5px] font-mono font-bold text-blue-400 bg-blue-950/60 border border-blue-500/40 px-1.5 py-0.5 rounded">
+              Tinggi: {slitHConfig.height}px
+            </span>
+          </div>
+
+          {/* Slider Tinggi Pita Slit Horizontal */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Tinggi Pita Slit (Piksel Presisi):</span>
+              <span className="font-mono text-blue-400 font-bold">{slitHConfig.height}px</span>
+            </div>
+            <input
+              type="range" min="10" max="250" value={slitHConfig.height}
+              onChange={(e) => setSlitHConfig(prev => ({ ...prev, height: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-400"
+            />
+            {/* Tombol Preset Tinggi Cepat */}
+            <div className="grid grid-cols-4 gap-1 mt-1.5">
+              {[
+                { h: 18, label: '18px (Slim)' },
+                { h: 36, label: '36px (Sedang)' },
+                { h: 72, label: '72px (Lebar)' },
+                { h: 140, label: '140px (Blok)' }
+              ].map(p => (
+                <button
+                  key={p.h}
+                  onClick={() => setSlitHConfig(prev => ({ ...prev, height: p.h }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.height === p.h ? 'bg-blue-500 text-black border-blue-400 shadow-sm' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Jangkauan Horizontal: Penuh vs Lokal */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Jangkauan Bentangan Horizontal:
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                onClick={() => setSlitHConfig(prev => ({ ...prev, reach: 'full' }))}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.reach === 'full' ? 'bg-blue-500 text-black border-blue-400' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
+              >
+                ↔️ Penuh (Kiri-Kanan)
+              </button>
+              <button
+                onClick={() => setSlitHConfig(prev => ({ ...prev, reach: 'local' }))}
+                className={`py-1 px-2 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.reach === 'local' ? 'bg-blue-500 text-black border-blue-400' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
+              >
+                📍 Lokal (Lebar Terbatas)
+              </button>
+            </div>
+            {slitHConfig.reach === 'local' && (
+              <div className="mt-1.5 pt-1.5 border-t border-dashed border-blue-500/30">
+                <div className="flex justify-between text-[8.5px] text-gray-400 mb-0.5">
+                  <span>Lebar Pita Lokal:</span>
+                  <span className="font-mono text-blue-400">{slitHConfig.width || 180}px</span>
+                </div>
+                <input
+                  type="range" min="60" max="500" value={slitHConfig.width || 180}
+                  onChange={(e) => setSlitHConfig(prev => ({ ...prev, width: Number(e.target.value) }))}
+                  className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-blue-400"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Kerapatan Irisan Garis (Multi-Stripe) */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Kerapatan Irisan Garis:
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { f: 1, label: '1 Pita' },
+                { f: 2, label: '2 Garis' },
+                { f: 4, label: '4 Halus' },
+                { f: 8, label: 'Barcode' }
+              ].map(item => (
+                <button
+                  key={item.f}
+                  onClick={() => setSlitHConfig(prev => ({ ...prev, frequency: item.f }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.frequency === item.f ? 'bg-blue-500 text-black border-blue-400 shadow-sm' : (isDarkMode ? 'bg-[#1f2533] text-gray-400 border-[#2d3445]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Opasitas Slit */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Transparansi Slit:</span>
+              <span className="font-mono text-blue-400">{slitHConfig.opacity}%</span>
+            </div>
+            <input
+              type="range" min="20" max="100" value={slitHConfig.opacity}
+              onChange={(e) => setSlitHConfig(prev => ({ ...prev, opacity: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-blue-400"
+            />
+          </div>
+
+          {/* Toggles Panah & Label */}
+          <div className="flex space-x-1 pt-0.5">
+            <button
+              onClick={() => setSlitHConfig(prev => ({ ...prev, showArrow: !prev.showArrow }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.showArrow ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : (isDarkMode ? 'bg-[#1f2533] border-[#2d3445] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Panah →: {slitHConfig.showArrow ? 'ON' : 'OFF'}
+            </button>
+            <button
+              onClick={() => setSlitHConfig(prev => ({ ...prev, showLabel: !prev.showLabel }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${slitHConfig.showLabel ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : (isDarkMode ? 'bg-[#1f2533] border-[#2d3445] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Label Teks: {slitHConfig.showLabel ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* C. DEDICATED SPECIMEN CARD CONTROLS */}
+      {manualBrushRole === 'card' && (
+        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#221c14] border-amber-500/40' : 'bg-amber-50/60 border-amber-300'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-amber-400' : 'text-amber-800'}`}>
+              🗂️ Pengaturan Kartu Solid Spesimen
+            </span>
+            <span className="text-[9.5px] font-mono font-bold text-amber-400 bg-amber-950/60 border border-amber-500/40 px-1.5 py-0.5 rounded">
+              {cardConfig.width} × {cardConfig.height}px
+            </span>
+          </div>
+
+          {/* Preset Ukuran Kartu Standar */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Preset Ukuran Kartu:
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { id: 'mini', label: '🏷️ Mini', w: 70, h: 26 },
+                { id: 'badge', label: '🗂️ Badge', w: 130, h: 44 },
+                { id: 'plaque', label: '📜 Plakat', w: 200, h: 75 },
+                { id: 'custom', label: '📐 Kustom', w: cardConfig.width, h: cardConfig.height }
+              ].map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    if (p.id === 'custom') {
+                      setCardConfig(prev => ({ ...prev, preset: 'custom' }));
+                    } else {
+                      setCardConfig(prev => ({ ...prev, preset: p.id, width: p.w, height: p.h }));
+                    }
+                  }}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${cardConfig.preset === p.id ? 'bg-amber-500 text-black border-amber-400 shadow-sm' : (isDarkMode ? 'bg-[#2b2216] text-gray-400 border-[#3d3121]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Slider Dimensi Kartu (Lebar & Tinggi) */}
+          <div className="space-y-1.5">
+            <div>
+              <div className={`flex justify-between text-[9px] mb-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <span>Lebar Kartu:</span>
+                <span className="font-mono text-amber-400 font-bold">{cardConfig.width}px</span>
+              </div>
+              <input
+                type="range" min="40" max="350" value={cardConfig.width}
+                onChange={(e) => setCardConfig(prev => ({ ...prev, preset: 'custom', width: Number(e.target.value) }))}
+                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+            </div>
+            <div>
+              <div className={`flex justify-between text-[9px] mb-0.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <span>Tinggi Kartu:</span>
+                <span className="font-mono text-amber-400 font-bold">{cardConfig.height}px</span>
+              </div>
+              <input
+                type="range" min="20" max="200" value={cardConfig.height}
+                onChange={(e) => setCardConfig(prev => ({ ...prev, preset: 'custom', height: Number(e.target.value) }))}
+                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+            </div>
+          </div>
+
+          {/* Palet Warna Kartu Cepat */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Warna Kartu:
+            </div>
+            <div className="flex items-center space-x-1.5">
+              {[
+                { hex: '#FFFFFF', name: 'Putih' },
+                { hex: '#F8F7F2', name: 'Krem' },
+                { hex: '#FEF08A', name: 'Kuning' },
+                { hex: '#A5F3FC', name: 'Cyan' },
+                { hex: '#A7F3D0', name: 'Mint' },
+                { hex: '#FBCFE8', name: 'Pink' },
+                { hex: '#18181B', name: 'Hitam' }
+              ].map(c => (
+                <button
+                  key={c.hex}
+                  onClick={() => setCardConfig(prev => ({ ...prev, color: c.hex }))}
+                  className={`w-6 h-6 rounded-md border transition-all cursor-pointer ${cardConfig.color.toUpperCase() === c.hex.toUpperCase() ? 'ring-2 ring-amber-400 scale-110 shadow' : 'border-gray-500/40 hover:scale-105'}`}
+                  style={{ backgroundColor: c.hex }}
+                  title={c.name}
+                />
+              ))}
+              <input
+                type="color"
+                value={cardConfig.color}
+                onChange={(e) => setCardConfig(prev => ({ ...prev, color: e.target.value }))}
+                className="w-6 h-6 rounded cursor-pointer border border-gray-500/40 bg-transparent p-0"
+                title="Warna Kustom"
+              />
+            </div>
+          </div>
+
+          {/* Opasitas Kartu */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Opasitas Kartu:</span>
+              <span className="font-mono text-amber-400">{cardConfig.opacity}%</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="range" min="20" max="100" value={cardConfig.opacity}
+                onChange={(e) => setCardConfig(prev => ({ ...prev, opacity: Number(e.target.value) }))}
+                className="flex-1 h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+              <button
+                onClick={() => setCardConfig(prev => ({ ...prev, opacity: prev.opacity === 100 ? 85 : 100 }))}
+                className={`px-1.5 py-0.5 text-[8.5px] font-bold rounded border ${cardConfig.opacity === 100 ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-[#2b2216] text-gray-400 border-[#3d3121]'}`}
+              >
+                {cardConfig.opacity === 100 ? 'Solid' : 'Glass'}
+              </button>
+            </div>
+          </div>
+
+          {/* Input Label Kustom Kartu */}
+          <div>
+            <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Isi Teks Label Kartu:
+            </div>
+            <input
+              type="text"
+              placeholder="Cth: FIGURE 01, SPECIMEN, ANATOMY..."
+              value={cardConfig.label || ''}
+              onChange={(e) => setCardConfig(prev => ({ ...prev, label: e.target.value.toUpperCase() }))}
+              className={`w-full px-2 py-1 text-xs font-mono font-bold rounded border uppercase ${isDarkMode ? 'bg-[#181818] border-[#383838] text-white placeholder-gray-600' : 'bg-white border-gray-300 text-black placeholder-gray-400'}`}
+            />
+          </div>
+
+          {/* Toggles Kartu */}
+          <div className="flex space-x-1 pt-0.5">
+            <button
+              onClick={() => setCardConfig(prev => ({ ...prev, showNum: !prev.showNum }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${cardConfig.showNum ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : (isDarkMode ? 'bg-[#2b2216] border-[#3d3121] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Nomor #: {cardConfig.showNum ? 'ON' : 'OFF'}
+            </button>
+            <button
+              onClick={() => setCardConfig(prev => ({ ...prev, showLabel: !prev.showLabel }))}
+              className={`flex-1 py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${cardConfig.showLabel ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : (isDarkMode ? 'bg-[#2b2216] border-[#3d3121] text-gray-500' : 'bg-white border-gray-200 text-gray-400')}`}
+            >
+              Teks Label: {cardConfig.showLabel ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* D. DEDICATED INTACT RESTORE BRUSH CONTROLS */}
+      {manualBrushRole === 'intact' && (
+        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#132018] border-emerald-500/40' : 'bg-emerald-50/60 border-emerald-300'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-emerald-400' : 'text-emerald-800'}`}>
+              🖼️ Kuas Pemulih Foto Asli (Restore)
+            </span>
+            <span className="text-[9.5px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded">
+              Radius: {intactConfig.radius}px
+            </span>
+          </div>
+
+          <div className="text-[8.5px] leading-relaxed opacity-75">
+            Usap pada kanvas untuk mengembalikan bagian foto asli yang jernih tanpa distorsi slit scan maupun kartu solid.
+          </div>
+
+          {/* Slider Radius Kuas Pemulih */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Radius Kuas Pemulih:</span>
+              <span className="font-mono text-emerald-400 font-bold">{intactConfig.radius}px</span>
+            </div>
+            <input
+              type="range" min="15" max="250" value={intactConfig.radius}
+              onChange={(e) => setIntactConfig(prev => ({ ...prev, radius: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+            />
+            <div className="grid grid-cols-3 gap-1 mt-1.5">
+              {[
+                { r: 30, label: '30px (Kecil)' },
+                { r: 65, label: '65px (Sedang)' },
+                { r: 130, label: '130px (Besar)' }
+              ].map(p => (
+                <button
+                  key={p.r}
+                  onClick={() => setIntactConfig(prev => ({ ...prev, radius: p.r }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${intactConfig.radius === p.r ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm' : (isDarkMode ? 'bg-[#1b2b21] text-gray-400 border-[#273d2f]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* E. DEDICATED BREAKOUT ERASER BRUSH CONTROLS */}
+      {manualBrushRole === 'breakout' && (
+        <div className={`p-2.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#221518] border-rose-500/40' : 'bg-rose-50/60 border-rose-300'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-rose-400' : 'text-rose-800'}`}>
+              ✂️ Kuas Penghapus / Breakout (Hero Cutout)
+            </span>
+            <span className="text-[9.5px] font-mono font-bold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-1.5 py-0.5 rounded">
+              Radius: {breakoutConfig.radius}px
+            </span>
+          </div>
+
+          <div className="text-[8.5px] leading-relaxed opacity-75">
+            Usap atau klik elemen pita / kartu untuk menghapusnya seketika. Foto asli akan tembus bersih bebas dari bingkai kotak.
+          </div>
+
+          {/* Slider Radius Kuas Penghapus */}
+          <div>
+            <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              <span>Radius Kuas Penghapus:</span>
+              <span className="font-mono text-rose-400 font-bold">{breakoutConfig.radius}px</span>
+            </div>
+            <input
+              type="range" min="15" max="250" value={breakoutConfig.radius}
+              onChange={(e) => setBreakoutConfig(prev => ({ ...prev, radius: Number(e.target.value) }))}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-rose-400"
+            />
+            <div className="grid grid-cols-3 gap-1 mt-1.5">
+              {[
+                { r: 25, label: '25px (Presisi)' },
+                { r: 65, label: '65px (Sedang)' },
+                { r: 140, label: '140px (Lebar)' }
+              ].map(p => (
+                <button
+                  key={p.r}
+                  onClick={() => setBreakoutConfig(prev => ({ ...prev, radius: p.r }))}
+                  className={`py-1 text-[8.5px] font-bold rounded border transition-all cursor-pointer ${breakoutConfig.radius === p.r ? 'bg-rose-500 text-black border-rose-400 shadow-sm' : (isDarkMode ? 'bg-[#2e1d21] text-gray-400 border-[#42292f]' : 'bg-white text-gray-600 border-gray-200')}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Editor Sel Terpilih (Jika Mengklik Sel di Mode Bento) */}
+      {selectedCellId && (() => {
+        const sel = gridCells.find(c => c.id === selectedCellId);
+        if (!sel) return null;
+        return (
+          <div className={`p-2.5 rounded-xl border space-y-2 ${isDarkMode ? 'bg-[#1a1a1a] border-emerald-500/40' : 'bg-emerald-50/50 border-emerald-300'}`}>
+            <div className="flex items-center justify-between text-[10px] font-bold">
+              <span className="text-emerald-400">Sel #{sel.num} Terpilih ({sel.mode?.toUpperCase()})</span>
+              <button onClick={() => setSelectedCellId(null)} className="text-gray-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div className="flex space-x-1">
+              {[
+                { id: 'slit_v', label: '↓ V' },
+                { id: 'slit_h', label: '→ H' },
+                { id: 'card', label: '🗂️' },
+                { id: 'intact', label: '🖼️' },
+                { id: 'breakout', label: '✂️' }
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, mode: m.id } : c))}
+                  className={`flex-1 py-1 text-[9px] font-bold rounded border ${sel.mode === m.id ? 'bg-emerald-500 text-black border-emerald-400' : (isDarkMode ? 'bg-[#222] text-gray-300 border-[#333]' : 'bg-white text-gray-700 border-gray-300')}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 5. Sakelar Anti-Clutter & Pembersihan Bersih */}
+      <div className={`p-2 rounded-xl border space-y-2 ${isDarkMode ? 'bg-[#151515] border-[#252525]' : 'bg-gray-50 border-gray-200'}`}>
+        <div className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          Tampilan Elemen & Pembersihan:
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            onClick={() => setShowBoxTypography(!showBoxTypography)}
+            className={`py-1.5 px-2 text-[9.5px] font-bold rounded-lg border transition-all cursor-pointer flex items-center justify-center space-x-1 ${showBoxTypography ? (isDarkMode ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-cyan-50 border-cyan-300 text-cyan-800') : (isDarkMode ? 'bg-[#1f1f1f] border-[#303030] text-gray-500' : 'bg-gray-100 border-gray-200 text-gray-400')}`}
+          >
+            <span>🏷️</span>
+            <span>Teks: {showBoxTypography ? 'ON' : 'OFF'}</span>
+          </button>
+          <button
+            onClick={() => setShowScratchBoxes(!showScratchBoxes)}
+            className={`py-1.5 px-2 text-[9.5px] font-bold rounded-lg border transition-all cursor-pointer flex items-center justify-center space-x-1 ${showScratchBoxes ? (isDarkMode ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-emerald-50 border-emerald-300 text-emerald-800') : (isDarkMode ? 'bg-[#1f1f1f] border-[#303030] text-gray-500' : 'bg-gray-100 border-gray-200 text-gray-400')}`}
+          >
+            <span>◻️</span>
+            <span>Bingkai: {showScratchBoxes ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#282828' : '#e5e7eb' }}>
+          <button
+            onClick={clearStretchMask}
+            className={`py-1 text-[8.5px] font-bold rounded border transition cursor-pointer ${isDarkMode ? 'bg-[#1e1e1e] border-[#333] text-cyan-400 hover:bg-[#282828]' : 'bg-white border-gray-200 text-cyan-800 hover:bg-gray-50'}`}
+            title="Hapus semua slit scan"
+          >
+            Hapus Slit 🌊
+          </button>
+          <button
+            onClick={clearCardMask}
+            className={`py-1 text-[8.5px] font-bold rounded border transition cursor-pointer ${isDarkMode ? 'bg-[#1e1e1e] border-[#333] text-amber-400 hover:bg-[#282828]' : 'bg-white border-gray-200 text-amber-800 hover:bg-gray-50'}`}
+            title="Hapus semua kartu"
+          >
+            Hapus Kartu 🗂️
+          </button>
+          <button
+            onClick={clearToCleanSlate}
+            className={`py-1 text-[8.5px] font-bold rounded border transition cursor-pointer ${isDarkMode ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
+            title="Reset kanvas ke foto murni"
+          >
+            Reset Bersih ✨
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [image, setImage] = useState(null);
@@ -328,24 +1111,74 @@ export default function App() {
   const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Panah ↓ / →
   const [showIntactBoxBorders, setShowIntactBoxBorders] = useState(true); // Garis & label pada sel utuh
 
-  // Mask & Mode Reset Handlers (Mencegah Blank Screen)
+  // --- KONFIGURASI DEDIKASI PER-PERAN KUAS MANUAL (INDEPENDENT BRUSH DIMENSIONS) ---
+  const [slitVConfig, setSlitVConfig] = useState({
+    width: 36, // px (10 s/d 250px)
+    reach: 'full', // 'full' (span dari atas ke bawah) | 'local' (tinggi terbatas)
+    height: 180, // px jika reach === 'local'
+    frequency: 1, // 1, 2, 4, 8
+    opacity: 100, // 20 s/d 100%
+    showArrow: true,
+    showLabel: true
+  });
+
+  const [slitHConfig, setSlitHConfig] = useState({
+    height: 36, // px (10 s/d 250px)
+    reach: 'full', // 'full' (span dari kiri ke kanan) | 'local' (lebar terbatas)
+    width: 180, // px jika reach === 'local'
+    frequency: 1, // 1, 2, 4, 8
+    opacity: 100, // 20 s/d 100%
+    showArrow: true,
+    showLabel: true
+  });
+
+  const [cardConfig, setCardConfig] = useState({
+    preset: 'badge', // 'mini', 'badge', 'plaque', 'custom'
+    width: 130, // px (40 s/d 350)
+    height: 44, // px (20 s/d 200)
+    color: '#FFFFFF',
+    opacity: 100, // 20 s/d 100%
+    label: '',
+    showNum: true,
+    showLabel: true
+  });
+
+  const [intactConfig, setIntactConfig] = useState({
+    radius: 65 // px (15 s/d 250)
+  });
+
+  const [breakoutConfig, setBreakoutConfig] = useState({
+    radius: 65 // px (15 s/d 250)
+  });
+
+  // Mode Penempatan Manual: 'freehand' (tambah pita/kartu presisi langsung di kursor) vs 'bento' (ubah sel kisi bento)
+  const [manualPlacementMode, setManualPlacementMode] = useState('freehand'); // 'freehand' | 'bento'
+  const lastPaintedStrokeIdRef = useRef(null);
+
+  // Mask & Mode Reset Handlers (Mencegah Blank Screen & Pembersihan Fleksibel)
+  const clearToCleanSlate = () => {
+    setGridCells([]);
+    setSelectedCellId(null);
+    setHoveredCellId(null);
+    lastPaintedStrokeIdRef.current = null;
+    setManualPlacementMode('freehand');
+    showToast('✨ Kanvas Bersih: Foto Asli Murni Tanpa Partisi Grid');
+  };
+
   const clearCardMask = () => {
-    setGridCells(prev => prev.map(c => c.mode === 'card' ? { ...c, mode: 'intact' } : c));
+    setGridCells(prev => prev.filter(c => c.mode !== 'card'));
     cardMaskPointsRef.current = [];
-    showToast('Semua Kartu dikembalikan ke Foto Utuh 🖼️');
+    showToast('Semua Kartu dibersihkan 🗂️');
   };
 
   const clearStretchMask = () => {
-    setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, mode: 'intact' } : c));
+    setGridCells(prev => prev.filter(c => c.mode !== 'slit_v' && c.mode !== 'slit_h'));
     stretchMaskPointsRef.current = [];
-    showToast('Semua Slit-Scan dikembalikan ke Foto Utuh 🖼️');
+    showToast('Semua Slit-Scan dibersihkan 🌊');
   };
 
   const clearAllMasks = () => {
-    setGridCells(prev => prev.map(c => ({ ...c, mode: 'intact' })));
-    cardMaskPointsRef.current = [];
-    stretchMaskPointsRef.current = [];
-    showToast('Seluruh Grid Direset ke Foto Asli Bersih ✨');
+    clearToCleanSlate();
   };
 
   // Kartu Cutout Solid
@@ -1055,6 +1888,44 @@ export default function App() {
 
   const currentTool = isSpacePressed ? 'pan' : activeTool;
 
+  const getImageAndGridBounds = useCallback(() => {
+    if (!image) return null;
+    const isRotated = rotation % 180 !== 0;
+    const formats = {
+      'original': { w: image.width, h: image.height },
+      'square': { w: 1080, h: 1080 },
+      'portrait': { w: 1080, h: 1350 },
+      'landscape': { w: 1920, h: 1080 },
+      'story': { w: 1080, h: 1920 },
+      'a4': { w: 1240, h: 1754 }
+    };
+    let baseW = formats[canvasFormat]?.w || image.width;
+    let baseH = formats[canvasFormat]?.h || image.height;
+    const canvasW = isRotated ? baseH : baseW;
+    const canvasH = isRotated ? baseW : baseH;
+
+    const centerX = canvasW / 2;
+    const centerY = canvasH / 2;
+    const scaleFactor = scale / 100;
+    const drawW = Math.floor(image.width * scaleFactor);
+    const drawH = Math.floor(image.height * scaleFactor);
+    const effectiveImgW = isRotated ? drawH : drawW;
+    const effectiveImgH = isRotated ? drawW : drawH;
+    const imgX = Math.floor(centerX - effectiveImgW / 2 + imageOffsetX);
+    const imgY = Math.floor(centerY - effectiveImgH / 2 + imageOffsetY);
+    const imgW = effectiveImgW;
+    const imgH = effectiveImgH;
+
+    const isImageLocked = gridBoundsMode === 'image';
+    const bX = isImageLocked ? imgX : 0;
+    const bY = isImageLocked ? imgY : 0;
+    const bW = isImageLocked ? imgW : canvasW;
+    const bH = isImageLocked ? imgH : canvasH;
+    const relScale = Math.max(1, canvasW / 1000);
+
+    return { canvasW, canvasH, drawW, drawH, imgX, imgY, imgW, imgH, bX, bY, bW, bH, relScale };
+  }, [image, rotation, canvasFormat, scale, imageOffsetX, imageOffsetY, gridBoundsMode]);
+
   const getCanvasCoords = (clientX, clientY) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -1065,71 +1936,248 @@ export default function App() {
     return { x, y };
   };
 
-  const applyBrushAtPoint = (e) => {
+  const applyBrushAtPoint = (e, isInitialClick = false) => {
     const coords = getCanvasCoords(e.clientX, e.clientY);
     if (!coords) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
+    const bounds = getImageAndGridBounds();
+    if (!bounds) return;
 
-    // Akurat: radius kuas dalam satuan koordinat kanvas nyata
-    const scaleFactor = canvas.width / Math.max(1, rect.width);
-    const brushRadiusCanvas = (brushSize / 2) * scaleFactor;
+    if (manualPlacementMode === 'freehand') {
+      // --- PENEMPATAN ELEMEN PRESISI (FREEHAND MODE) ---
+      if (manualBrushRole === 'slit_v') {
+        const w = Math.max(10, Math.min(250, slitVConfig.width));
+        const reach = slitVConfig.reach;
+        let elemX = Math.round(coords.x - w / 2);
+        elemX = Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - w, elemX));
 
-    setGridCells(prev => {
-      let hasChanges = false;
-      const updated = prev.map(c => {
-        // Cek apakah kuas bersentuhan dengan sel
-        const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
-        const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
-        const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
+        let elemY, elemH;
+        if (reach === 'full') {
+          elemY = bounds.bY;
+          elemH = bounds.bH;
+        } else {
+          elemH = Math.min(bounds.bH, slitVConfig.height || 180);
+          elemY = Math.round(Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - elemH, coords.y - elemH / 2)));
+        }
 
-        if (distSq <= brushRadiusCanvas**2) {
-          if (manualBrushRole === 'slit_v') {
-            // Hitung titik sampling relatif presisi di dalam sel sesuai titik kursor
-            const normY = Math.max(0.04, Math.min(0.96, (coords.y - c.y) / c.h));
-            // Batasi lebar pita agar proporsional dan tidak menutupi seluruh objek
-            const brushCoverage = Math.round(((brushRadiusCanvas * 2) / c.h) * 100);
-            const targetCov = manualSlitSize
-              ? Math.min(manualSlitSize, Math.max(10, brushCoverage))
-              : Math.max(10, Math.min(40, brushCoverage));
+        const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.y - elemY) / Math.max(1, elemH)));
 
-            hasChanges = true;
-            return {
-              ...c,
+        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
+          const newId = `free_v_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          lastPaintedStrokeIdRef.current = newId;
+          const word = aiWords[gridCells.length % (aiWords.length || 1)] || 'SPECIMEN';
+          setGridCells(prev => [
+            ...prev,
+            {
+              id: newId,
               mode: 'slit_v',
-              sampleOffset: normY,
-              slitCoverage: targetCov,
-              slitFrequency: slitFrequency || c.slitFrequency || 1,
-              slitOpacity: slitOpacity || c.slitOpacity || 100
-            };
-          } else if (manualBrushRole === 'slit_h') {
-            const normX = Math.max(0.04, Math.min(0.96, (coords.x - c.x) / c.w));
-            const brushCoverage = Math.round(((brushRadiusCanvas * 2) / c.w) * 100);
-            const targetCov = manualSlitSize
-              ? Math.min(manualSlitSize, Math.max(10, brushCoverage))
-              : Math.max(10, Math.min(40, brushCoverage));
+              x: elemX,
+              y: elemY,
+              w: w,
+              h: elemH,
+              num: prev.length + 1,
+              word: slitVConfig.showLabel ? word : '',
+              sampleOffset,
+              slitCoverage: 100,
+              slitFrequency: slitVConfig.frequency,
+              slitOpacity: slitVConfig.opacity,
+              showArrow: slitVConfig.showArrow,
+              showLabel: slitVConfig.showLabel,
+              isManualFreehand: true
+            }
+          ]);
+        } else {
+          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
+            ...c,
+            x: elemX,
+            y: elemY,
+            w: w,
+            h: elemH,
+            sampleOffset
+          } : c));
+        }
+      } else if (manualBrushRole === 'slit_h') {
+        const h = Math.max(10, Math.min(250, slitHConfig.height));
+        const reach = slitHConfig.reach;
+        let elemY = Math.round(coords.y - h / 2);
+        elemY = Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - h, elemY));
 
-            hasChanges = true;
-            return {
-              ...c,
+        let elemX, elemW;
+        if (reach === 'full') {
+          elemX = bounds.bX;
+          elemW = bounds.bW;
+        } else {
+          elemW = Math.min(bounds.bW, slitHConfig.width || 180);
+          elemX = Math.round(Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - elemW, coords.x - elemW / 2)));
+        }
+
+        const sampleOffset = Math.max(0.01, Math.min(0.99, (coords.x - elemX) / Math.max(1, elemW)));
+
+        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
+          const newId = `free_h_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          lastPaintedStrokeIdRef.current = newId;
+          const word = aiWords[gridCells.length % (aiWords.length || 1)] || 'SPECIMEN';
+          setGridCells(prev => [
+            ...prev,
+            {
+              id: newId,
               mode: 'slit_h',
-              sampleOffset: normX,
-              slitCoverage: targetCov,
-              slitFrequency: slitFrequency || c.slitFrequency || 1,
-              slitOpacity: slitOpacity || c.slitOpacity || 100
-            };
-          } else {
-            if (c.mode !== manualBrushRole) {
+              x: elemX,
+              y: elemY,
+              w: elemW,
+              h: h,
+              num: prev.length + 1,
+              word: slitHConfig.showLabel ? word : '',
+              sampleOffset,
+              slitCoverage: 100,
+              slitFrequency: slitHConfig.frequency,
+              slitOpacity: slitHConfig.opacity,
+              showArrow: slitHConfig.showArrow,
+              showLabel: slitHConfig.showLabel,
+              isManualFreehand: true
+            }
+          ]);
+        } else {
+          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
+            ...c,
+            x: elemX,
+            y: elemY,
+            w: elemW,
+            h: h,
+            sampleOffset
+          } : c));
+        }
+      } else if (manualBrushRole === 'card') {
+        const cw = Math.max(20, Math.min(350, cardConfig.width));
+        const ch = Math.max(16, Math.min(200, cardConfig.height));
+        const elemX = Math.round(Math.max(bounds.bX, Math.min(bounds.bX + bounds.bW - cw, coords.x - cw / 2)));
+        const elemY = Math.round(Math.max(bounds.bY, Math.min(bounds.bY + bounds.bH - ch, coords.y - ch / 2)));
+
+        if (isInitialClick || !lastPaintedStrokeIdRef.current) {
+          const newId = `free_card_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          lastPaintedStrokeIdRef.current = newId;
+          const word = cardConfig.label || aiWords[gridCells.length % (aiWords.length || 1)] || 'FIGURE';
+          setGridCells(prev => [
+            ...prev,
+            {
+              id: newId,
+              mode: 'card',
+              x: elemX,
+              y: elemY,
+              w: cw,
+              h: ch,
+              num: prev.length + 1,
+              word: cardConfig.showLabel ? word : '',
+              cardColor: cardConfig.color,
+              cutoutCardOpacity: cardConfig.opacity,
+              showNum: cardConfig.showNum,
+              showLabel: cardConfig.showLabel,
+              isManualFreehand: true
+            }
+          ]);
+        } else {
+          setGridCells(prev => prev.map(c => c.id === lastPaintedStrokeIdRef.current ? {
+            ...c,
+            x: elemX,
+            y: elemY
+          } : c));
+        }
+      } else if (manualBrushRole === 'breakout' || manualBrushRole === 'intact') {
+        const radius = manualBrushRole === 'breakout' ? breakoutConfig.radius : intactConfig.radius;
+        const rect = canvas.getBoundingClientRect();
+        const scaleFactor = canvas.width / Math.max(1, rect.width);
+        const rCanvas = radius * scaleFactor;
+
+        setGridCells(prev => prev.filter(c => {
+          if (!c.isManualFreehand) return true;
+          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
+          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
+          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
+          return distSq > rCanvas**2;
+        }).map(c => {
+          if (c.isManualFreehand) return c;
+          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
+          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
+          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
+          if (distSq <= rCanvas**2) {
+            return { ...c, mode: manualBrushRole };
+          }
+          return c;
+        }));
+      }
+    } else {
+      // --- MANIPULASI SEL KISI BENTO (BENTO GRID MODE) ---
+      const rect = canvas.getBoundingClientRect();
+      const scaleFactor = canvas.width / Math.max(1, rect.width);
+      let activeRadius = brushSize;
+      if (manualBrushRole === 'slit_v') activeRadius = slitVConfig.width;
+      else if (manualBrushRole === 'slit_h') activeRadius = slitHConfig.height;
+      else if (manualBrushRole === 'card') activeRadius = Math.max(cardConfig.width, cardConfig.height) / 2;
+      else if (manualBrushRole === 'intact') activeRadius = intactConfig.radius;
+      else if (manualBrushRole === 'breakout') activeRadius = breakoutConfig.radius;
+      
+      const brushRadiusCanvas = (activeRadius / 2) * scaleFactor;
+
+      setGridCells(prev => {
+        let hasChanges = false;
+        const updated = prev.map(c => {
+          const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
+          const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
+          const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
+
+          if (distSq <= brushRadiusCanvas**2) {
+            if (manualBrushRole === 'slit_v') {
+              const normY = Math.max(0.04, Math.min(0.96, (coords.y - c.y) / c.h));
+              const cov = Math.min(100, Math.max(10, Math.round((slitVConfig.width / c.w) * 100)));
               hasChanges = true;
-              return { ...c, mode: manualBrushRole };
+              return {
+                ...c,
+                mode: 'slit_v',
+                sampleOffset: normY,
+                slitCoverage: cov,
+                slitFrequency: slitVConfig.frequency,
+                slitOpacity: slitVConfig.opacity,
+                showArrow: slitVConfig.showArrow,
+                showLabel: slitVConfig.showLabel
+              };
+            } else if (manualBrushRole === 'slit_h') {
+              const normX = Math.max(0.04, Math.min(0.96, (coords.x - c.x) / c.w));
+              const cov = Math.min(100, Math.max(10, Math.round((slitHConfig.height / c.h) * 100)));
+              hasChanges = true;
+              return {
+                ...c,
+                mode: 'slit_h',
+                sampleOffset: normX,
+                slitCoverage: cov,
+                slitFrequency: slitHConfig.frequency,
+                slitOpacity: slitHConfig.opacity,
+                showArrow: slitHConfig.showArrow,
+                showLabel: slitHConfig.showLabel
+              };
+            } else if (manualBrushRole === 'card') {
+              hasChanges = true;
+              return {
+                ...c,
+                mode: 'card',
+                cardColor: cardConfig.color,
+                cutoutCardOpacity: cardConfig.opacity,
+                word: cardConfig.label || c.word,
+                showNum: cardConfig.showNum,
+                showLabel: cardConfig.showLabel
+              };
+            } else {
+              if (c.mode !== manualBrushRole) {
+                hasChanges = true;
+                return { ...c, mode: manualBrushRole };
+              }
             }
           }
-        }
-        return c;
+          return c;
+        });
+        return hasChanges ? updated : prev;
       });
-      return hasChanges ? updated : prev;
-    });
+    }
   };
 
   const handleWorkspacePointerDown = (e) => {
@@ -1143,10 +2191,10 @@ export default function App() {
         setIsManualMode(true);
       }
       isPaintingRef.current = true;
+      lastPaintedStrokeIdRef.current = null;
       e.target.setPointerCapture(e.pointerId);
-      applyBrushAtPoint(e);
+      applyBrushAtPoint(e, true);
     } else if (engineMode === 'manual') {
-      // Klik sel langsung untuk memilih atau mengganti mode
       const coords = getCanvasCoords(e.clientX, e.clientY);
       if (coords) {
         const clicked = gridCells.find(c => coords.x >= c.x && coords.x <= c.x + c.w && coords.y >= c.y && coords.y <= c.y + c.h);
@@ -1181,7 +2229,7 @@ export default function App() {
       setPan(prev => ({ x: prev.x + e.nativeEvent.movementX, y: prev.y + e.nativeEvent.movementY }));
     } 
     else if (isPaintingRef.current && currentTool === 'brush') {
-      applyBrushAtPoint(e);
+      applyBrushAtPoint(e, false);
     } else if (engineMode === 'manual') {
       const coords = getCanvasCoords(e.clientX, e.clientY);
       if (coords) {
@@ -1203,7 +2251,10 @@ export default function App() {
       setDraggingGuide(null);
     }
     if (isPanning) setIsPanning(false);
-    if (isPaintingRef.current) isPaintingRef.current = false;
+    if (isPaintingRef.current) {
+      isPaintingRef.current = false;
+      lastPaintedStrokeIdRef.current = null;
+    }
     e.target.releasePointerCapture(e.pointerId);
   };
 
@@ -1226,37 +2277,9 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isRotated = rotation % 180 !== 0;
-    const formats = {
-        'original': { w: image.width, h: image.height },
-        'square': { w: 1080, h: 1080 },
-        'portrait': { w: 1080, h: 1350 },
-        'landscape': { w: 1920, h: 1080 },
-        'story': { w: 1080, h: 1920 },
-        'a4': { w: 1240, h: 1754 }
-    };
-    let baseW = formats[canvasFormat].w;
-    let baseH = formats[canvasFormat].h;
-    const canvasW = isRotated ? baseH : baseW;
-    const canvasH = isRotated ? baseW : baseH;
-
-    const centerX = canvasW / 2;
-    const centerY = canvasH / 2;
-    const scaleFactor = scale / 100; 
-    const drawW = Math.floor(image.width * scaleFactor);
-    const drawH = Math.floor(image.height * scaleFactor);
-    const effectiveImgW = isRotated ? drawH : drawW;
-    const effectiveImgH = isRotated ? drawW : drawH;
-    const imgX = Math.floor(centerX - effectiveImgW / 2 + imageOffsetX);
-    const imgY = Math.floor(centerY - effectiveImgH / 2 + imageOffsetY);
-    const imgW = effectiveImgW;
-    const imgH = effectiveImgH;
-
-    const isImageLocked = gridBoundsMode === 'image';
-    const bX = isImageLocked ? imgX : 0;
-    const bY = isImageLocked ? imgY : 0;
-    const bW = isImageLocked ? imgW : canvasW;
-    const bH = isImageLocked ? imgH : canvasH;
+    const bounds = getImageAndGridBounds();
+    if (!bounds) return;
+    const { bX, bY, bW, bH } = bounds;
 
     const newCells = createGridCells({
       bX, bY, bW, bH,
@@ -1277,21 +2300,20 @@ export default function App() {
 
     setGridCells(newCells);
   }, [
-    image, rotation, canvasFormat, scale, imageOffsetX, imageOffsetY, gridBoundsMode,
-    complexity, gridPartitionStyle, boxSizeVariety, stretchBalance, stretchDirX, stretchDirY,
-    cutoutCardDensity, heroBreakoutThreshold, intactCellRatio, slitCoverage, slitFrequency, slitOpacity,
-    seed
+    image, getImageAndGridBounds, complexity, gridPartitionStyle, boxSizeVariety,
+    stretchBalance, stretchDirX, stretchDirY, cutoutCardDensity, heroBreakoutThreshold,
+    intactCellRatio, slitCoverage, slitFrequency, seed, aiWords
   ]);
 
   useEffect(() => {
-    if (image) {
+    if (image && engineMode === 'auto') {
       generateAutomaticGrid();
     }
   }, [
     image, scale, rotation, canvasFormat, gridBoundsMode, complexity, gridPartitionStyle,
     boxSizeVariety, stretchBalance, stretchDirX, stretchDirY, cutoutCardDensity,
     heroBreakoutThreshold, intactCellRatio,
-    seed, imageOffsetX, imageOffsetY, generateAutomaticGrid
+    seed, imageOffsetX, imageOffsetY, engineMode, generateAutomaticGrid
   ]);
 
   const handleRandomize = () => {
@@ -1299,36 +2321,6 @@ export default function App() {
     setSeed(nextSeed);
     generateAutomaticGrid(nextSeed);
     showToast('Struktur Grid Diacak 🔀');
-  };
-
-  const hexToRgba = (hex, opacityPercent) => {
-    if (!hex) return '#FFFFFF';
-    let c = hex.replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    const r = parseInt(c.substring(0, 2), 16) || 255;
-    const g = parseInt(c.substring(2, 4), 16) || 255;
-    const b = parseInt(c.substring(4, 6), 16) || 255;
-    const alpha = Math.max(0, Math.min(1, opacityPercent / 100));
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  const getContrastTextColor = (hex) => {
-    if (!hex) return '#000000';
-    let c = hex.replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    const r = parseInt(c.substring(0, 2), 16) || 255;
-    const g = parseInt(c.substring(2, 4), 16) || 255;
-    const b = parseInt(c.substring(4, 6), 16) || 255;
-    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-    return yiq >= 128 ? '#000000' : '#FFFFFF';
-  };
-
-  const fontFamilies = {
-    'sans': '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    'mono': '"JetBrains Mono", "SF Mono", "Courier New", Courier, monospace',
-    'serif': '"Playfair Display", "Times New Roman", Georgia, serif',
-    'grotesk': '"Arial Black", Impact, "Helvetica Neue", sans-serif',
-    'condensed': '"Arial Narrow", "Trebuchet MS", sans-serif'
   };
 
   // --- LOGIKA UTAMA PENGGAMBARAN KANVAS (CELL-BASED PROCESSING ENGINE) ---
@@ -1531,7 +2523,7 @@ export default function App() {
         ctx.restore();
       } else if (cell.mode === 'card') {
         ctx.save();
-        const cardFill = hexToRgba(cell.cardColor || cutoutCardColor, cutoutCardOpacity);
+        const cardFill = hexToRgba(cell.cardColor || cardConfig.color || cutoutCardColor, cell.cutoutCardOpacity != null ? cell.cutoutCardOpacity : cardConfig.opacity);
         ctx.fillStyle = cardFill;
         ctx.fillRect(cell.x, cell.y, cell.w, cell.h);
         ctx.restore();
@@ -1549,7 +2541,7 @@ export default function App() {
           let strokeColor = '#000000';
           if (boxBorderColor === 'auto') {
             if (cell.mode === 'card') {
-              strokeColor = getContrastTextColor(cell.cardColor || cutoutCardColor) === '#000000'
+              strokeColor = getContrastTextColor(cell.cardColor || cardConfig.color || cutoutCardColor) === '#000000'
                 ? `rgba(0,0,0,${baseAlpha})` : `rgba(255,255,255,${baseAlpha})`;
             } else {
               strokeColor = isDarkMode ? `rgba(255,255,255,${baseAlpha * 0.85})` : `rgba(0,0,0,${baseAlpha})`;
@@ -1592,37 +2584,49 @@ export default function App() {
         }
       }
 
-      // 3. Typography & Arrows
-      if (showBoxTypography && cell.w >= 22 * relScale && cell.h >= 13 * relScale) {
+      // 3. Typography & Arrows (Clutter-Free Anti-Overlap Engine)
+      const canShowText = showBoxTypography && cell.showLabel !== false && (
+        (cell.mode === 'card' && cell.w >= 34 * relScale && cell.h >= 16 * relScale) ||
+        (cell.mode !== 'card' && cell.w >= 54 * relScale && cell.h >= 28 * relScale)
+      );
+
+      if (canShowText) {
         ctx.save();
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
         let arrowChar = '';
-        if (showDirectionArrows || boxNumberFormat === 'arrows') {
+        if ((showDirectionArrows || boxNumberFormat === 'arrows') && cell.showArrow !== false) {
           if (cell.mode === 'slit_v') arrowChar = '↓';
           else if (cell.mode === 'slit_h') arrowChar = '→';
         }
 
-        let numDisplay = `${cell.num}${arrowChar}`;
-        if (boxNumberFormat === 'pad') numDisplay = `${cell.num < 10 ? '0' : ''}${cell.num}${arrowChar}`;
-        else if (boxNumberFormat === 'plus') numDisplay = `${cell.num}+`;
+        let numDisplay = '';
+        if (cell.showNum !== false) {
+          numDisplay = `${cell.num || 1}${arrowChar}`;
+          if (boxNumberFormat === 'pad') numDisplay = `${(cell.num || 1) < 10 ? '0' : ''}${cell.num || 1}${arrowChar}`;
+          else if (boxNumberFormat === 'plus') numDisplay = `${cell.num || 1}+`;
+        } else if (arrowChar) {
+          numDisplay = arrowChar;
+        }
 
         let textFill = (cell.mode === 'card')
-          ? getContrastTextColor(cell.cardColor || cutoutCardColor)
+          ? getContrastTextColor(cell.cardColor || cardConfig.color || cutoutCardColor)
           : (isDarkMode ? '#FFFFFF' : '#000000');
 
         ctx.fillStyle = textFill;
         ctx.font = `800 ${mainFontSize}px ${currentFontFamily}`;
 
-        let renderWord = cell.word || 'SPECIMEN';
-        const maxTextW = cell.w - padX * 2;
-        if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
-          renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
+        let renderWord = cell.word !== undefined ? cell.word : 'SPECIMEN';
+        if (renderWord) {
+          const maxTextW = cell.w - padX * 2;
+          if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
+            renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
+          }
+          ctx.fillText(renderWord, Math.floor(cell.x + padX), Math.floor(cell.y + padY));
         }
-        ctx.fillText(renderWord, Math.floor(cell.x + padX), Math.floor(cell.y + padY));
 
-        if (cell.h >= (mainFontSize + subFontSize + padY * 2)) {
+        if (numDisplay && cell.h >= (mainFontSize + subFontSize + padY * 2)) {
           ctx.font = `700 ${subFontSize}px ${currentFontFamily}`;
           ctx.fillText(numDisplay, Math.floor(cell.x + padX), Math.floor(cell.y + padY + mainFontSize + Math.floor(2 * relScale)));
         }
@@ -1669,7 +2673,8 @@ export default function App() {
     showScratchBoxes, showIntactBoxBorders, showBoxTypography,
     boxFontSize, boxFontFamily, showDirectionArrows, boxNumberFormat, cutoutCardColor, cutoutCardOpacity,
     slitCoverage, manualSlitSize, slitFrequency, slitOpacity, stretchInt,
-    gridCells, hoveredCellId, selectedCellId, engineMode
+    slitVConfig, slitHConfig, cardConfig, intactConfig, breakoutConfig,
+    gridCells, hoveredCellId, selectedCellId, engineMode, getImageAndGridBounds
   ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
@@ -1750,24 +2755,50 @@ export default function App() {
               ))}
             </div>
           ) : (
-            /* Jika Mode Manual: Tampilkan Kuas Cepat */
-            <div className="flex items-center space-x-1">
+            /* Jika Mode Manual: Tampilkan Kuas Cepat dengan Dimensi & Sakelar Anti-Clutter */
+            <div className="flex items-center space-x-1 overflow-x-auto py-0.5">
               <span className={`text-[9.5px] font-bold uppercase tracking-wider px-1 ${isDarkMode ? 'text-cyan-400' : 'text-cyan-700'}`}>Kuas:</span>
               {[
-                { role: 'slit_v', label: '↓ Slit V' },
-                { role: 'slit_h', label: '→ Slit H' },
-                { role: 'card', label: '🗂️ Card' },
-                { role: 'intact', label: '🖼️ Intact' },
-                { role: 'breakout', label: '✂️ Break' }
+                { role: 'slit_v', label: '↓ Slit V', sizeStr: `${slitVConfig.width}px` },
+                { role: 'slit_h', label: '→ Slit H', sizeStr: `${slitHConfig.height}px` },
+                { role: 'card', label: '🗂️ Card', sizeStr: `${cardConfig.width}×${cardConfig.height}` },
+                { role: 'intact', label: '🖼️ Intact', sizeStr: `${intactConfig.radius}px` },
+                { role: 'breakout', label: '✂️ Break', sizeStr: `${breakoutConfig.radius}px` }
               ].map(b => (
                 <button
                   key={b.role}
                   onClick={() => { setManualBrushRole(b.role); setActiveTool('brush'); }}
-                  className={`px-2 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${manualBrushRole === b.role ? (isDarkMode ? 'bg-cyan-400 text-black shadow' : 'bg-cyan-700 text-white shadow') : (isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-gray-600 hover:text-black hover:bg-white')}`}
+                  className={`px-2 py-1 text-xs font-bold rounded-md transition-all flex items-center space-x-1 cursor-pointer ${manualBrushRole === b.role ? (isDarkMode ? 'bg-cyan-400 text-black shadow' : 'bg-cyan-700 text-white shadow') : (isDarkMode ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-gray-600 hover:text-black hover:bg-white')}`}
                 >
-                  {b.label}
+                  <span>{b.label}</span>
+                  <span className={`text-[9px] font-mono px-1 rounded ${manualBrushRole === b.role ? (isDarkMode ? 'bg-cyan-600/40 text-black font-extrabold' : 'bg-white/30 text-white font-extrabold') : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-600')}`}>{b.sizeStr}</span>
                 </button>
               ))}
+
+              <div className={`h-4 w-[1px] mx-1 ${isDarkMode ? 'bg-[#333]' : 'bg-gray-300'}`}></div>
+
+              {/* Anti-clutter Quick Toggles */}
+              <button
+                onClick={() => setShowBoxTypography(!showBoxTypography)}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md border transition-all cursor-pointer ${showBoxTypography ? (isDarkMode ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-cyan-50 border-cyan-300 text-cyan-800') : (isDarkMode ? 'bg-[#181818] border-[#333] text-gray-500' : 'bg-gray-100 border-gray-200 text-gray-400')}`}
+                title="Sembunyikan/Tampilkan Teks Nomor & Kata"
+              >
+                🏷️ Teks: {showBoxTypography ? 'ON' : 'OFF'}
+              </button>
+              <button
+                onClick={() => setShowScratchBoxes(!showScratchBoxes)}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md border transition-all cursor-pointer ${showScratchBoxes ? (isDarkMode ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-emerald-50 border-emerald-300 text-emerald-800') : (isDarkMode ? 'bg-[#181818] border-[#333] text-gray-500' : 'bg-gray-100 border-gray-200 text-gray-400')}`}
+                title="Sembunyikan/Tampilkan Garis Bingkai Kotak"
+              >
+                ◻️ Bingkai: {showScratchBoxes ? 'ON' : 'OFF'}
+              </button>
+              <button
+                onClick={clearToCleanSlate}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md border transition-all cursor-pointer ${isDarkMode ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100'}`}
+                title="Mulai dari Kanvas Bersih Tanpa Partisi Grid"
+              >
+                ✨ Bersih
+              </button>
             </div>
           )}
         </div>
@@ -1996,266 +3027,39 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* --- KONTROL MODE MANUAL --- */}
+                  {/* --- KONTROL MODE MANUAL DEDIKASI --- */}
                   {engineMode === 'manual' && (
-                    <div className="space-y-3 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
-                      <div>
-                        <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                          Pilih Peran Kuas (Klik/Usap Sel di Kanvas):
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {[
-                            { role: 'slit_v', label: '↓ Slit Vertikal', desc: 'Tarik garis vertikal', color: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10' },
-                            { role: 'slit_h', label: '→ Slit Horizontal', desc: 'Tarik garis horizontal', color: 'text-blue-400 border-blue-500/40 bg-blue-500/10' },
-                            { role: 'card', label: '🗂️ Kartu Solid', desc: 'Kartu putih spesimen', color: 'text-amber-400 border-amber-500/40 bg-amber-500/10' },
-                            { role: 'intact', label: '🖼️ Foto Utuh', desc: 'Foto asli berbingkai', color: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' },
-                            { role: 'breakout', label: '✂️ Breakout (Hapus)', desc: 'Bebas tembus kanvas', color: 'text-rose-400 border-rose-500/40 bg-rose-500/10' }
-                          ].map(item => (
-                            <button
-                              key={item.role}
-                              onClick={() => { setManualBrushRole(item.role); setActiveTool('brush'); }}
-                              className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${manualBrushRole === item.role ? `${item.color} font-bold ring-1 shadow-sm` : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
-                            >
-                              <div className="text-[10px] font-bold">{item.label}</div>
-                              <div className="text-[8px] opacity-70">{item.desc}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Slider Ukuran Kuas */}
-                      <div>
-                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                          <span>Radius Usapan Kuas</span>
-                          <span className="font-mono text-cyan-400">{brushSize}px</span>
-                        </div>
-                        <input
-                          type="range" min="15" max="150" value={brushSize}
-                          onChange={(e) => setBrushSize(Number(e.target.value))}
-                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                        />
-                      </div>
-
-                      {/* Kontrol Ukuran & Kerapatan Pita Slit-Scan (Mencegah Objek Tertutup) */}
-                      <div className={`p-2.5 rounded-lg border space-y-2.5 ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a]' : 'bg-gray-100/70 border-gray-200'}`}>
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-cyan-400' : 'text-cyan-700'}`}>
-                            🌊 Kalibrasi Ukuran Pita Slit
-                          </span>
-                          <span className="text-[9px] font-mono font-bold text-cyan-400">{manualSlitSize}%</span>
-                        </div>
-
-                        {/* Slider Ukuran Pita Slit */}
-                        <div>
-                          <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            <span>Lebar/Tinggi Pita (Slim ➔ Penuh)</span>
-                            <span className="font-mono">{manualSlitSize}%</span>
-                          </div>
-                          <input
-                            type="range" min="10" max="100" value={manualSlitSize}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setManualSlitSize(val);
-                              setSlitCoverage(val);
-                              setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: val } : c));
-                            }}
-                            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                          />
-                          <div className="flex justify-between text-[8px] text-gray-500 mt-0.5 font-mono">
-                            <span>10% (Pita Tipis)</span>
-                            <span>45% (Aestetik)</span>
-                            <span>100% (Blok Penuh)</span>
-                          </div>
-                        </div>
-
-                        {/* Pilihan Kerapatan Irisan / Multi-Stripe */}
-                        <div>
-                          <div className={`text-[9px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Kerapatan Irisan Garis:
-                          </div>
-                          <div className="grid grid-cols-4 gap-1">
-                            {[
-                              { f: 1, label: '1 Pita' },
-                              { f: 2, label: '2 Garis' },
-                              { f: 4, label: '4 Halus' },
-                              { f: 8, label: 'Barcode' }
-                            ].map(item => (
-                              <button
-                                key={item.f}
-                                onClick={() => {
-                                  setSlitFrequency(item.f);
-                                  setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: item.f } : c));
-                                }}
-                                className={`py-1 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-600 border-gray-200')}`}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Slider Opasitas Slit */}
-                        <div>
-                          <div className={`flex justify-between text-[9px] mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            <span>Transparansi Slit (Tembus Teks)</span>
-                            <span className="font-mono">{slitOpacity}%</span>
-                          </div>
-                          <input
-                            type="range" min="30" max="100" value={slitOpacity}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setSlitOpacity(val);
-                              setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitOpacity: val } : c));
-                            }}
-                            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Editor Sel Terpilih */}
-                      {selectedCellId && (() => {
-                        const sel = gridCells.find(c => c.id === selectedCellId);
-                        if (!sel) return null;
-                        const isSlit = sel.mode === 'slit_v' || sel.mode === 'slit_h';
-                        return (
-                          <div className={`p-2.5 rounded-lg border space-y-2.5 ${isDarkMode ? 'bg-[#1a1a1a] border-emerald-500/40' : 'bg-emerald-50/50 border-emerald-300'}`}>
-                            <div className="flex items-center justify-between text-[10px] font-bold">
-                              <span className="text-emerald-400">Sel #{sel.num} Terpilih ({sel.mode.toUpperCase()})</span>
-                              <button onClick={() => setSelectedCellId(null)} className="text-gray-400 hover:text-white text-xs">✕</button>
-                            </div>
-                            <div className="flex space-x-1">
-                              {[
-                                { id: 'slit_v', label: '↓ V' },
-                                { id: 'slit_h', label: '→ H' },
-                                { id: 'card', label: '🗂️' },
-                                { id: 'intact', label: '🖼️' },
-                                { id: 'breakout', label: '✂️' }
-                              ].map(m => (
-                                <button
-                                  key={m.id}
-                                  onClick={() => setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, mode: m.id } : c))}
-                                  className={`flex-1 py-1 text-[9.5px] font-bold rounded border ${sel.mode === m.id ? 'bg-emerald-500 text-black border-emerald-400' : (isDarkMode ? 'bg-[#222] text-gray-300 border-[#333]' : 'bg-white text-gray-700 border-gray-300')}`}
-                                >
-                                  {m.label}
-                                </button>
-                              ))}
-                            </div>
-
-                            {/* Kontrol Khusus Jika Sel Slit */}
-                            {isSlit && (
-                              <div className="space-y-1.5 pt-1 border-t border-dashed border-gray-700">
-                                <div>
-                                  <div className="flex justify-between text-[9px] text-gray-400 mb-0.5">
-                                    <span>Ukuran Pita Sel Ini:</span>
-                                    <span className="text-cyan-400 font-mono">{sel.slitCoverage != null ? sel.slitCoverage : manualSlitSize}%</span>
-                                  </div>
-                                  <input
-                                    type="range" min="10" max="100"
-                                    value={sel.slitCoverage != null ? sel.slitCoverage : manualSlitSize}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value);
-                                      setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, slitCoverage: val } : c));
-                                    }}
-                                    className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                                  />
-                                </div>
-                                <div>
-                                  <div className="flex justify-between text-[9px] text-gray-400 mb-0.5">
-                                    <span>Posisi Garis Sampel Irisan:</span>
-                                    <span className="text-emerald-400 font-mono">{Math.round((sel.sampleOffset != null ? sel.sampleOffset : 0.5) * 100)}%</span>
-                                  </div>
-                                  <input
-                                    type="range" min="0" max="100"
-                                    value={Math.round((sel.sampleOffset != null ? sel.sampleOffset : 0.5) * 100)}
-                                    onChange={(e) => {
-                                      const val = Number(e.target.value) / 100;
-                                      setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, sampleOffset: val } : c));
-                                    }}
-                                    className="w-full h-1 rounded-lg appearance-none cursor-pointer accent-emerald-400"
-                                  />
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    const cov = sel.slitCoverage != null ? sel.slitCoverage : manualSlitSize;
-                                    setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: cov } : c));
-                                    showToast(`Ukuran ${cov}% diterapkan ke semua sel slit`);
-                                  }}
-                                  className="w-full py-1 text-[8.5px] font-bold rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 cursor-pointer"
-                                >
-                                  Terapkan Ukuran ini ke Semua Sel Slit 🌊
-                                </button>
-                              </div>
-                            )}
-
-                            <div>
-                              <div className="text-[9px] font-semibold text-gray-400 mb-0.5">Edit Kata Label:</div>
-                              <input
-                                type="text"
-                                value={sel.word || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value.toUpperCase();
-                                  setGridCells(prev => prev.map(c => c.id === sel.id ? { ...c, word: val } : c));
-                                }}
-                                className={`w-full px-2 py-1 text-xs font-mono font-bold rounded border uppercase ${isDarkMode ? 'bg-[#121212] border-[#333] text-white' : 'bg-white border-gray-300 text-black'}`}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Tombol Re-generate Struktur di Mode Manual */}
-                      <button
-                        onClick={handleRandomize}
-                        className="w-full py-2 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-400 font-bold text-[10.5px] flex items-center justify-center space-x-2 transition-all active:scale-98 cursor-pointer"
-                      >
-                        <span>🔀</span>
-                        <span>Buat Variasi Struktur Baru (Re-generate Grid)</span>
-                      </button>
-
-                      {/* Tombol Aksi Cepat Massal */}
-                      <div className="grid grid-cols-2 gap-1 pt-1">
-                        <button
-                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: 'intact' }))); showToast('Semua sel diubah ke Foto Utuh'); }}
-                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-                        >
-                          Semua Foto Utuh 🖼️
-                        </button>
-                        <button
-                          onClick={() => {
-                            const cov = manualSlitSize || 30;
-                            setGridCells(prev => prev.map(c => ({
-                              ...c,
-                              mode: c.w > c.h ? 'slit_h' : 'slit_v',
-                              slitCoverage: cov,
-                              slitFrequency: slitFrequency || 1,
-                              slitOpacity: slitOpacity || 100
-                            })));
-                            showToast(`Semua sel diubah ke Slit-Scan (${cov}%)`);
-                          }}
-                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-                        >
-                          Semua Slit-Scan 🌊
-                        </button>
-                        <button
-                          onClick={() => {
-                            setGridCells(prev => prev.map(c => {
-                              const isEdge = c.col === 0 || c.row === 0;
-                              return isEdge ? { ...c, mode: 'card' } : c;
-                            }));
-                            showToast('Tepi luar diubah ke Kartu Putih');
-                          }}
-                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
-                        >
-                          Tepi Jadi Kartu 🗂️
-                        </button>
-                        <button
-                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: 'breakout' }))); showToast('Grid dikosongkan (Breakout)'); }}
-                          className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-rose-400 hover:text-rose-300' : 'bg-white border-gray-200 text-rose-700 hover:bg-rose-50'}`}
-                        >
-                          Kosongkan Grid ✂️
-                        </button>
-                      </div>
-                    </div>
+                    <ManualDedicatedControls
+                      isDarkMode={isDarkMode}
+                      manualPlacementMode={manualPlacementMode}
+                      setManualPlacementMode={setManualPlacementMode}
+                      manualBrushRole={manualBrushRole}
+                      setManualBrushRole={setManualBrushRole}
+                      slitVConfig={slitVConfig}
+                      setSlitVConfig={setSlitVConfig}
+                      slitHConfig={slitHConfig}
+                      setSlitHConfig={setSlitHConfig}
+                      cardConfig={cardConfig}
+                      setCardConfig={setCardConfig}
+                      intactConfig={intactConfig}
+                      setIntactConfig={setIntactConfig}
+                      breakoutConfig={breakoutConfig}
+                      setBreakoutConfig={setBreakoutConfig}
+                      showBoxTypography={showBoxTypography}
+                      setShowBoxTypography={setShowBoxTypography}
+                      showScratchBoxes={showScratchBoxes}
+                      setShowScratchBoxes={setShowScratchBoxes}
+                      clearToCleanSlate={clearToCleanSlate}
+                      clearStretchMask={clearStretchMask}
+                      clearCardMask={clearCardMask}
+                      handleRandomize={handleRandomize}
+                      selectedCellId={selectedCellId}
+                      setSelectedCellId={setSelectedCellId}
+                      gridCells={gridCells}
+                      setGridCells={setGridCells}
+                      showToast={showToast}
+                      setActiveTool={setActiveTool}
+                    />
                   )}
                 </div>
 
@@ -2784,137 +3588,62 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="space-y-3.5 pt-1">
-                    {/* Pemilihan Peran Kuas */}
-                    <div>
-                      <div className={`text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                        Pilih Peran Kuas (Lukis Sel di Kanvas):
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { role: 'slit_v', label: '↓ Slit Vertikal', desc: 'Tarik garis vertikal', color: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10' },
-                          { role: 'slit_h', label: '→ Slit Horizontal', desc: 'Tarik garis horizontal', color: 'text-blue-400 border-blue-500/40 bg-blue-500/10' },
-                          { role: 'card', label: '🗂️ Kartu Solid', desc: 'Kartu spesimen berlabel', color: 'text-amber-400 border-amber-500/40 bg-amber-500/10' },
-                          { role: 'intact', label: '🖼️ Foto Utuh', desc: 'Kembalikan foto asli', color: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' },
-                          { role: 'breakout', label: '✂️ Breakout (Hapus)', desc: 'Tembus bebas tanpa bingkai', color: 'text-rose-400 border-rose-500/40 bg-rose-500/10' }
-                        ].map(item => (
-                          <button
-                            key={item.role}
-                            onClick={() => {
-                              setManualBrushRole(item.role);
-                              setActiveTool('brush');
-                              setEngineMode('manual');
-                              setIsManualMode(true);
-                              showToast(`Peran Kuas: ${item.label}`);
-                            }}
-                            className={`p-2 text-left rounded-lg border transition-all cursor-pointer ${manualBrushRole === item.role ? `${item.color} font-bold ring-1 shadow-sm` : (isDarkMode ? 'bg-[#181818] border-[#282828] text-gray-400 hover:text-gray-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50')}`}
-                          >
-                            <div className="text-[10px] font-bold">{item.label}</div>
-                            <div className="text-[8px] opacity-70">{item.desc}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Ukuran Kuas */}
-                    <div>
-                      <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                        <span>Radius Usapan Kuas</span>
-                        <span className="font-mono text-cyan-400">{brushSize}px</span>
-                      </div>
-                      <input 
-                        type="range" min="15" max="250" value={brushSize} 
-                        onChange={(e) => setBrushSize(Number(e.target.value))} 
-                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
-                      />
-                    </div>
-
-                    {/* Kalibrasi Ukuran Slit yang Dilukis */}
-                    <div className={`p-2.5 rounded-lg border space-y-2 ${isDarkMode ? 'bg-[#181818] border-[#282828]' : 'bg-gray-100 border-gray-200'}`}>
-                      <div className="flex justify-between text-[10px] font-semibold">
-                        <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Ukuran Pita Slit yang Dilukis:</span>
-                        <span className="font-mono text-cyan-400">{manualSlitSize}%</span>
-                      </div>
-                      <input 
-                        type="range" min="10" max="100" value={manualSlitSize} 
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setManualSlitSize(val);
-                          setSlitCoverage(val);
-                          setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: val } : c));
-                        }} 
-                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
-                      />
-                      <div className="flex justify-between text-[8px] text-gray-500 font-mono">
-                        <span>10% (Pita Ramping)</span>
-                        <span>45% (Aestetik)</span>
-                        <span>100% (Penuh)</span>
-                      </div>
-
-                      {/* Kerapatan Irisan / Multi-Stripe di Tab Kuas */}
-                      <div className="pt-1">
-                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                          Garis Pita Multi-Stripe:
+                  {engineMode === 'manual' ? (
+                    <ManualDedicatedControls
+                      isDarkMode={isDarkMode}
+                      manualPlacementMode={manualPlacementMode}
+                      setManualPlacementMode={setManualPlacementMode}
+                      manualBrushRole={manualBrushRole}
+                      setManualBrushRole={setManualBrushRole}
+                      slitVConfig={slitVConfig}
+                      setSlitVConfig={setSlitVConfig}
+                      slitHConfig={slitHConfig}
+                      setSlitHConfig={setSlitHConfig}
+                      cardConfig={cardConfig}
+                      setCardConfig={setCardConfig}
+                      intactConfig={intactConfig}
+                      setIntactConfig={setIntactConfig}
+                      breakoutConfig={breakoutConfig}
+                      setBreakoutConfig={setBreakoutConfig}
+                      showBoxTypography={showBoxTypography}
+                      setShowBoxTypography={setShowBoxTypography}
+                      showScratchBoxes={showScratchBoxes}
+                      setShowScratchBoxes={setShowScratchBoxes}
+                      clearToCleanSlate={clearToCleanSlate}
+                      clearStretchMask={clearStretchMask}
+                      clearCardMask={clearCardMask}
+                      handleRandomize={handleRandomize}
+                      selectedCellId={selectedCellId}
+                      setSelectedCellId={setSelectedCellId}
+                      gridCells={gridCells}
+                      setGridCells={setGridCells}
+                      showToast={showToast}
+                      setActiveTool={setActiveTool}
+                    />
+                  ) : (
+                    <div className="space-y-3 pt-2 text-center">
+                      <div className={`p-4 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a]' : 'bg-gray-100 border-gray-200'}`}>
+                        <div className="text-2xl">✍️</div>
+                        <div className={`text-xs font-bold ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                          Studio Kuas Siap Digunakan
                         </div>
-                        <div className="grid grid-cols-4 gap-1">
-                          {[
-                            { f: 1, label: '1 Pita' },
-                            { f: 2, label: '2 Garis' },
-                            { f: 4, label: '4 Halus' },
-                            { f: 8, label: 'Barcode' }
-                          ].map(item => (
-                            <button
-                              key={item.f}
-                              onClick={() => {
-                                setSlitFrequency(item.f);
-                                setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: item.f } : c));
-                              }}
-                              className={`py-1 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-600 border-gray-200')}`}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
+                        <p className="text-[11px] text-gray-500 leading-relaxed">
+                          Anda sedang berada dalam Mode Otomatis (Generatif). Aktifkan Mode Manual untuk melukis pita slit dan kartu spesimen dengan ukuran independen.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setEngineMode('manual');
+                            setIsManualMode(true);
+                            setActiveTool('brush');
+                            showToast('Mode Manual diaktifkan ✍️ Kuas siap melukis');
+                          }}
+                          className="w-full py-2.5 px-3 rounded-lg bg-cyan-400 text-black font-bold text-xs hover:bg-cyan-300 transition-all shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+                        >
+                          <span>✍️ Beralih ke Mode Manual & Buka Kuas</span>
+                        </button>
                       </div>
-
-                      <div className="flex justify-between text-[10px] font-semibold pt-1">
-                        <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Opasitas Slit yang Dilukis:</span>
-                        <span className="font-mono text-cyan-400">{slitOpacity}%</span>
-                      </div>
-                      <input 
-                        type="range" min="30" max="100" value={slitOpacity} 
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setSlitOpacity(val);
-                          setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitOpacity: val } : c));
-                        }} 
-                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
-                      />
                     </div>
-
-                    {/* Tombol Aksi Bersih & Reset Kuas */}
-                    <div className="grid grid-cols-2 gap-1.5 pt-1">
-                      <button 
-                        onClick={clearCardMask} 
-                        className={`text-[10px] py-2 rounded-lg font-bold transition border cursor-pointer ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-amber-400 hover:bg-[#252525]' : 'bg-white border-gray-200 text-amber-800 hover:bg-gray-50'}`}
-                      >
-                        Hapus Semua Kartu 🗂️
-                      </button>
-                      <button 
-                        onClick={clearStretchMask} 
-                        className={`text-[10px] py-2 rounded-lg font-bold transition border cursor-pointer ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-cyan-400 hover:bg-[#252525]' : 'bg-white border-gray-200 text-blue-800 hover:bg-gray-50'}`}
-                      >
-                        Hapus Semua Slit 🌊
-                      </button>
-                    </div>
-                    
-                    <button 
-                      onClick={clearAllMasks} 
-                      className={`w-full text-[10px] py-2.5 rounded-lg font-bold transition border cursor-pointer ${isDarkMode ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}
-                    >
-                      Reset Seluruh Grid ke Foto Utuh ✨
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3313,25 +4042,226 @@ export default function App() {
                </div>
             ))}
 
-            {/* Indikator Lingkaran Kuas Interaktif (Interactive Brush Cursor Preview) */}
-            {activeTool === 'brush' && !isPanning && image && (
-              <div
-                style={{
-                  position: 'fixed',
-                  left: mousePos.x,
-                  top: mousePos.y,
-                  width: `${brushSize * viewScale}px`,
-                  height: `${brushSize * viewScale}px`,
-                  transform: 'translate(-50%, -50%)',
-                  pointerEvents: 'none',
-                  zIndex: 50,
-                  borderRadius: '50%',
-                  border: '2px dashed rgba(6, 182, 212, 0.85)',
-                  backgroundColor: 'rgba(6, 182, 212, 0.12)',
-                  boxShadow: '0 0 12px rgba(6, 182, 212, 0.4)'
-                }}
-              />
-            )}
+            {/* Indikator Kuas Interaktif Akurat Sesuai Bentuk Elemen (Shape-Accurate Cursor Indicator) */}
+            {activeTool === 'brush' && !isPanning && image && (() => {
+              const canvas = canvasRef.current;
+              const bounds = getImageAndGridBounds();
+              const screenScale = (canvas && bounds?.canvasW) ? (canvas.getBoundingClientRect().width / bounds.canvasW) : viewScale;
+
+              if (engineMode === 'manual' && manualPlacementMode === 'freehand') {
+                if (manualBrushRole === 'slit_v') {
+                  const w = Math.max(8, Math.round(slitVConfig.width * screenScale));
+                  const h = Math.max(16, Math.round((slitVConfig.reach === 'full' ? (bounds?.bH || 600) : (slitVConfig.height || 180)) * screenScale));
+                  return (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: mousePos.x,
+                        top: mousePos.y,
+                        width: `${w}px`,
+                        height: `${h}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                        border: '2px solid rgba(6, 182, 212, 0.9)',
+                        backgroundColor: 'rgba(6, 182, 212, 0.18)',
+                        boxShadow: '0 0 15px rgba(6, 182, 212, 0.45)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '4px 0'
+                      }}
+                    >
+                      <div className="w-full h-full absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-[1px] h-full border-r border-dashed border-cyan-400/60" />
+                      </div>
+                      <span className="relative z-10 px-1 py-0.2 bg-black/80 text-cyan-300 text-[8px] font-mono font-bold rounded border border-cyan-500/50 shadow">
+                        ↓ {slitVConfig.width}px
+                      </span>
+                      <span className="relative z-10 px-1 py-0.2 bg-black/80 text-cyan-300 text-[8px] font-mono font-bold rounded border border-cyan-500/50 shadow">
+                        {slitVConfig.reach === 'full' ? 'FULL' : `${slitVConfig.height}px`}
+                      </span>
+                    </div>
+                  );
+                } else if (manualBrushRole === 'slit_h') {
+                  const w = Math.max(16, Math.round((slitHConfig.reach === 'full' ? (bounds?.bW || 600) : (slitHConfig.width || 180)) * screenScale));
+                  const h = Math.max(8, Math.round(slitHConfig.height * screenScale));
+                  return (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: mousePos.x,
+                        top: mousePos.y,
+                        width: `${w}px`,
+                        height: `${h}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                        border: '2px solid rgba(59, 130, 246, 0.9)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.18)',
+                        boxShadow: '0 0 15px rgba(59, 130, 246, 0.45)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0 6px'
+                      }}
+                    >
+                      <div className="w-full h-full absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-full h-[1px] border-b border-dashed border-blue-400/60" />
+                      </div>
+                      <span className="relative z-10 px-1 py-0.2 bg-black/80 text-blue-300 text-[8px] font-mono font-bold rounded border border-blue-500/50 shadow">
+                        → {slitHConfig.height}px
+                      </span>
+                      <span className="relative z-10 px-1 py-0.2 bg-black/80 text-blue-300 text-[8px] font-mono font-bold rounded border border-blue-500/50 shadow">
+                        {slitHConfig.reach === 'full' ? 'FULL' : `${slitHConfig.width}px`}
+                      </span>
+                    </div>
+                  );
+                } else if (manualBrushRole === 'card') {
+                  const w = Math.max(20, Math.round(cardConfig.width * screenScale));
+                  const h = Math.max(16, Math.round(cardConfig.height * screenScale));
+                  return (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: mousePos.x,
+                        top: mousePos.y,
+                        width: `${w}px`,
+                        height: `${h}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                        border: '2px solid #f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                        borderRadius: '6px',
+                        boxShadow: '0 0 16px rgba(245, 158, 11, 0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <span className="px-1.5 py-0.5 bg-black/85 text-amber-300 text-[9px] font-mono font-bold rounded border border-amber-500/60 shadow">
+                        🗂️ {cardConfig.width}×{cardConfig.height}
+                      </span>
+                    </div>
+                  );
+                } else if (manualBrushRole === 'intact') {
+                  const r = Math.max(12, Math.round(intactConfig.radius * screenScale));
+                  return (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: mousePos.x,
+                        top: mousePos.y,
+                        width: `${r * 2}px`,
+                        height: `${r * 2}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                        borderRadius: '50%',
+                        border: '2px dashed #10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <span className="px-1.5 py-0.5 bg-black/80 text-emerald-300 text-[8.5px] font-mono font-bold rounded border border-emerald-500/50 shadow">
+                        🖼️ R:{intactConfig.radius}
+                      </span>
+                    </div>
+                  );
+                } else if (manualBrushRole === 'breakout') {
+                  const r = Math.max(12, Math.round(breakoutConfig.radius * screenScale));
+                  return (
+                    <div
+                      style={{
+                        position: 'fixed',
+                        left: mousePos.x,
+                        top: mousePos.y,
+                        width: `${r * 2}px`,
+                        height: `${r * 2}px`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                        borderRadius: '50%',
+                        border: '2px dashed #f43f5e',
+                        backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                        boxShadow: '0 0 15px rgba(244, 63, 94, 0.4)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <span className="px-1.5 py-0.5 bg-black/80 text-rose-300 text-[8.5px] font-mono font-bold rounded border border-rose-500/50 shadow">
+                        ✂️ R:{breakoutConfig.radius}
+                      </span>
+                    </div>
+                  );
+                }
+              }
+
+              // Bento Mode or Auto Mode Cursor (Circle)
+              let d = brushSize;
+              let label = `${brushSize}px`;
+              let borderColor = 'rgba(6, 182, 212, 0.85)';
+              let bgColor = 'rgba(6, 182, 212, 0.12)';
+
+              if (engineMode === 'manual') {
+                if (manualBrushRole === 'slit_v') {
+                  d = slitVConfig.width;
+                  label = `↓ ${d}px`;
+                } else if (manualBrushRole === 'slit_h') {
+                  d = slitHConfig.height;
+                  label = `→ ${d}px`;
+                } else if (manualBrushRole === 'card') {
+                  d = Math.max(cardConfig.width, cardConfig.height);
+                  label = `🗂️ ${cardConfig.width}×${cardConfig.height}`;
+                  borderColor = '#f59e0b';
+                  bgColor = 'rgba(245, 158, 11, 0.15)';
+                } else if (manualBrushRole === 'intact') {
+                  d = intactConfig.radius * 2;
+                  label = `🖼️ R:${intactConfig.radius}`;
+                  borderColor = '#10b981';
+                  bgColor = 'rgba(16, 185, 129, 0.15)';
+                } else if (manualBrushRole === 'breakout') {
+                  d = breakoutConfig.radius * 2;
+                  label = `✂️ R:${breakoutConfig.radius}`;
+                  borderColor = '#f43f5e';
+                  bgColor = 'rgba(244, 63, 94, 0.15)';
+                }
+              }
+
+              const pixelDim = Math.max(14, Math.round(d * screenScale));
+
+              return (
+                <div
+                  style={{
+                    position: 'fixed',
+                    left: mousePos.x,
+                    top: mousePos.y,
+                    width: `${pixelDim}px`,
+                    height: `${pixelDim}px`,
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                    zIndex: 50,
+                    borderRadius: '50%',
+                    border: `2px dashed ${borderColor}`,
+                    backgroundColor: bgColor,
+                    boxShadow: '0 0 12px rgba(6, 182, 212, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <span className="px-1 py-0.2 bg-black/80 text-white text-[8px] font-mono font-bold rounded shadow">
+                    {label}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* --- FLOATING CANVAS DOCK (CANVA / FIGMA STYLE BOTTOM CENTER) --- */}
@@ -3354,7 +4284,7 @@ export default function App() {
                   setActiveTool('brush'); 
                   setEngineMode('manual'); 
                   setIsManualMode(true); 
-                  setActiveTab('grid'); 
+                  setActiveTab('brush'); 
                   showToast(`Brush aktif: mode ${manualBrushRole.toUpperCase()}`);
                 }} 
                 title="Brush Lukis Sel [Shortcut: B]"
