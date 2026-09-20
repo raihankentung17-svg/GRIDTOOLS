@@ -148,12 +148,8 @@ export default function App() {
   const [boxBorderColor, setBoxBorderColor] = useState('auto'); // 'auto', '#000000', '#ffffff', '#10B981', '#00FFFF'
   const [boxSizeVariety, setBoxSizeVariety] = useState('editorial'); // 'balanced', 'varied', 'editorial', 'bento'
 
-  // Pola Klaster Spesimen Anatomi (Sesuai 4 Gambar Referensi)
-  const [clusterLayout, setClusterLayout] = useState('full'); // 'full', 'stepped_diagonal', 'anatomical_cross', 'columnar_t', 'horizontal_spine'
   const [showIntactBoxBorders, setShowIntactBoxBorders] = useState(false); // Beri garis & label pada kotak normal utuh
   const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Tampilkan panah ↓ / → pada angka sesuai arah slit
-  const [outerFramingCards, setOuterFramingCards] = useState(true); // Kartu putih pembingkai spesimen di perimeter klaster
-  const [heroBreakout, setHeroBreakout] = useState(true); // Bebaskan kepala/wajah subjek agar utuh menembus grid
 
   // Kartu Cutout Solid
   const [showCutoutCards, setShowCutoutCards] = useState(true);
@@ -375,13 +371,10 @@ export default function App() {
   // --- PRESET SYSTEM (1-Klik Tampilan Siap Pakai) ---
   const applyPreset = (presetName) => {
     if (presetName === 'cat_diagonal') {
-      setClusterLayout('stepped_diagonal');
       setShowScratchBoxes(true);
       setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
@@ -399,13 +392,10 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 🐱 Stepped Diagonal (Cat) diterapkan');
     } else if (presetName === 'goldfish_axial') {
-      setClusterLayout('anatomical_cross');
       setShowScratchBoxes(true);
       setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
@@ -423,13 +413,10 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 🐠 Axial Cross (Goldfish) diterapkan');
     } else if (presetName === 'flamingo_column') {
-      setClusterLayout('columnar_t');
       setShowScratchBoxes(true);
       setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
@@ -447,13 +434,10 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 🦩 Columnar T-Frame (Flamingo) diterapkan');
     } else if (presetName === 'fish_skeleton') {
-      setClusterLayout('horizontal_spine');
       setShowScratchBoxes(true);
       setShowIntactBoxBorders(true);
       setShowBoxTypography(true);
       setShowDirectionArrows(true);
-      setOuterFramingCards(true);
-      setHeroBreakout(true);
       setShowCutoutCards(true);
       setCutoutCardColor('#FFFFFF');
       setCutoutCardOpacity(100);
@@ -471,7 +455,6 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 🦴 Anatomy Spine (Fish) diterapkan');
     } else if (presetName === 'editorial') {
-      setClusterLayout('full');
       setShowIntactBoxBorders(false);
       setShowDirectionArrows(false);
       setShowScratchBoxes(true);
@@ -492,7 +475,6 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 📰 Editorial Grid diterapkan');
     } else if (presetName === 'cyber') {
-      setClusterLayout('full');
       setShowIntactBoxBorders(false);
       setShowDirectionArrows(false);
       setShowScratchBoxes(true);
@@ -508,7 +490,6 @@ export default function App() {
       setTextColor('#00FFFF');
       showToast('Preset: ⚡ Cyber Slit diterapkan');
     } else if (presetName === 'zine') {
-      setClusterLayout('full');
       setShowIntactBoxBorders(false);
       setShowDirectionArrows(false);
       setShowScratchBoxes(true);
@@ -525,7 +506,6 @@ export default function App() {
       setBrutalInt(45);
       showToast('Preset: 📄 Brutal Zine diterapkan');
     } else if (presetName === 'minimal') {
-      setClusterLayout('full');
       setShowIntactBoxBorders(false);
       setShowDirectionArrows(false);
       setShowScratchBoxes(false);
@@ -947,94 +927,6 @@ export default function App() {
             let isPerimeterCard = false;
             let cardArrow = '';
 
-            if (clusterLayout === 'stepped_diagonal') {
-                // Diagonal staircase (Gaya Kucing)
-                const diagCenter = 0.22 + 0.65 * relCX;
-                const dist = relCY - diagCenter;
-
-                if (heroBreakout && relCX < 0.42 && relCY < 0.35) {
-                    isHeroZone = true;
-                    inCluster = true;
-                } else if (heroBreakout && relCX > 0.62 && relCY < 0.52) {
-                    inCluster = false;
-                } else if (dist >= -0.25 && dist <= 0.32) {
-                    inCluster = true;
-                    if (outerFramingCards && (dist >= 0.10 || (relCX < 0.28 && relCY >= 0.32 && relCY <= 0.60))) {
-                        isPerimeterCard = true;
-                        cardArrow = relCY > 0.55 ? '↓' : '→';
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'anatomical_cross') {
-                // Silang Aksial (Gaya Ikan Mas)
-                const inHoriz = relCY >= 0.22 && relCY <= 0.78;
-                const inVert = relCX >= 0.20 && relCX <= 0.68;
-
-                if (inHoriz || inVert) {
-                    inCluster = true;
-                    if (heroBreakout && relCX >= 0.46 && relCX <= 0.82 && relCY >= 0.42 && relCY <= 0.72) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if (relCX < 0.28 || (relCY < 0.32 && relCX < 0.45) || (relCY > 0.72 && relCX > 0.52)) {
-                            isPerimeterCard = true;
-                            cardArrow = relCY > 0.5 ? '↓' : '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'columnar_t') {
-                // Tiang Vertikal T (Gaya Flamingo)
-                const inBody = relCY >= 0.24 && relCY <= 0.50 && relCX >= 0.12 && relCX <= 0.82;
-                const inLegs = relCX >= 0.36 && relCX <= 0.62 && relCY >= 0.24 && relCY <= 0.95;
-                const inNeck = relCX >= 0.54 && relCX <= 0.78 && relCY >= 0.12 && relCY <= 0.38;
-
-                if (inBody || inLegs || inNeck) {
-                    inCluster = true;
-                    if (heroBreakout && relCX >= 0.66 && relCY <= 0.28) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if (relCX < 0.28 && relCY >= 0.24 && relCY <= 0.65) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        } else if (relCX > 0.54 && relCY >= 0.68) {
-                            isPerimeterCard = true;
-                            cardArrow = '↓';
-                        } else if (relCX < 0.42 && relCY < 0.28) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            } else if (clusterLayout === 'horizontal_spine') {
-                // Tulang Spine (Gaya Tulang Ikan)
-                const inSpine = relCY >= 0.32 && relCY <= 0.64 && relCX >= 0.05 && relCX <= 0.95;
-                const inDorsal = relCY >= 0.12 && relCY <= 0.42 && relCX >= 0.25 && relCX <= 0.78;
-                const inVentral = relCY >= 0.56 && relCY <= 0.88 && relCX >= 0.25 && relCX <= 0.78;
-
-                if (inSpine || inDorsal || inVentral) {
-                    inCluster = true;
-                    if (heroBreakout && (relCX <= 0.24 || relCX >= 0.80)) {
-                        isHeroZone = true;
-                    } else if (outerFramingCards) {
-                        if ((relCX < 0.20 && relCY > 0.50) || (relCX > 0.75 && relCY > 0.55)) {
-                            isPerimeterCard = true;
-                            cardArrow = '→';
-                        }
-                    }
-                } else {
-                    inCluster = false;
-                }
-            }
-
-            if (!inCluster) {
-                normalPass.push({ type: 'breakout', x, y, w, h, dstW, dstH, inCluster: false });
-                continue;
-            }
-
             let applyStretch = false;
             let applyCard = isPerimeterCard;
 
@@ -1370,7 +1262,7 @@ export default function App() {
     cutoutCardColor, cutoutCardOpacity, cutoutCardDensity, boxFontFamily, boxNumberFormat, boxFontSize,
     showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat,
     gridBoundsMode, imageOffsetX, imageOffsetY, stretchBalance,
-    clusterLayout, showIntactBoxBorders, showDirectionArrows, outerFramingCards, heroBreakout
+    showIntactBoxBorders, showDirectionArrows
   ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
@@ -1553,52 +1445,6 @@ export default function App() {
             {activeTab === 'boxes' && (
               <div className="space-y-4 animate-in fade-in duration-150">
                 
-                {/* 0. POLA KLASTER SPESIMEN ANATOMI (SWISS BIO-ARCHIVE) */}
-                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
-                  <div>
-                    <div className="text-xs font-bold flex items-center space-x-1.5">
-                      <span>🔬</span>
-                      <span>Pola Klaster Anatomi (Swiss Specimen)</span>
-                    </div>
-                    <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Bentuk susunan grid mengikuti kontur gestur & anatomi subjek
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: 'full', label: '📐 Full Grid', desc: 'Standar persegi penuh' },
-                      { id: 'stepped_diagonal', label: '🐱 Tangga Diagonal', desc: 'Gaya Kucing Melompat' },
-                      { id: 'anatomical_cross', label: '🐠 Silang Aksial', desc: 'Gaya Ikan Mas' },
-                      { id: 'columnar_t', label: '🦩 Tiang Vertikal', desc: 'Gaya Flamingo T-Frame' },
-                      { id: 'horizontal_spine', label: '🦴 Spine Tulang', desc: 'Gaya Tulang Ikan' }
-                    ].map(layout => (
-                      <button
-                        key={layout.id}
-                        onClick={() => setClusterLayout(layout.id)}
-                        className={`p-2 text-left rounded-lg border transition-all ${clusterLayout === layout.id ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-400 text-emerald-400 font-bold ring-1 ring-emerald-400/40 shadow-sm' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold shadow-sm') : (isDarkMode ? 'bg-[#181818] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
-                      >
-                        <div className="text-[10px] font-bold">{layout.label}</div>
-                        <div className="text-[8px] opacity-70">{layout.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Kontrol Spesimen Lanjutan */}
-                  {clusterLayout !== 'full' && (
-                    <div className="space-y-2 pt-2 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
-                      <label className="flex items-center justify-between cursor-pointer">
-                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Bebaskan Kepala/Wajah (Hero Breakout)</span>
-                        <input type="checkbox" checked={heroBreakout} onChange={(e) => setHeroBreakout(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
-                      </label>
-                      <label className="flex items-center justify-between cursor-pointer">
-                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Kartu Putih Pembingkai Luar (Perimeter)</span>
-                        <input type="checkbox" checked={outerFramingCards} onChange={(e) => setOuterFramingCards(e.target.checked)} className="w-4 h-4 accent-amber-500" />
-                      </label>
-                    </div>
-                  )}
-                </div>
-
                 {/* 1. KARTU CUTOUT SOLID */}
                 <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
                   <div className="flex items-center justify-between">
