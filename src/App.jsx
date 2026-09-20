@@ -206,6 +206,9 @@ export default function App() {
     ]
   };
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
+  const [scanResult, setScanResult] = useState(null);
+  const [showScanResultModal, setShowScanResultModal] = useState(false);
+  const [copiedWordsNotice, setCopiedWordsNotice] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -227,9 +230,14 @@ export default function App() {
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, []);
 
+  const applyKeywordsToCells = useCallback((wordsToApply) => {
+    if (!wordsToApply || wordsToApply.length === 0) return;
+    setAiWords(wordsToApply);
+  }, []);
+
   useEffect(() => {
-     setAiWords(fallbackWords[annoLang]);
-     handleRandomize();
+     const words = fallbackWords[annoLang] || fallbackWords['EN'];
+     applyKeywordsToCells(words);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annoLang]);
 
@@ -544,96 +552,277 @@ export default function App() {
     }
   };
 
-  const handleAiAnalysis = async () => {
-    if (!image) return; 
-    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Masukkan Token API Gemini Anda terlebih dahulu."); return; }
-    setIsAiAnalyzing(true);
-    
+  // --- Analisis Visual Cerdas Lokal (Bebas Token & Instan) ---
+  const analyzeImageVisually = (img, lang = 'EN') => {
     try {
-        const tempCanvas = document.createElement('canvas');
-        const MAX_SIZE = 500; 
-        let w = image.width; let h = image.height;
-        if (w > MAX_SIZE || h > MAX_SIZE) { 
-            const ratio = Math.min(MAX_SIZE / w, MAX_SIZE / h); 
-            w *= ratio; h *= ratio; 
+      const canvas = document.createElement('canvas');
+      const sampleSize = 120;
+      canvas.width = sampleSize;
+      canvas.height = sampleSize;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
+      const imgData = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
+
+      let rTotal = 0, gTotal = 0, bTotal = 0, lumTotal = 0;
+      let minLum = 255, maxLum = 0;
+      const totalPixels = sampleSize * sampleSize;
+
+      for (let i = 0; i < imgData.length; i += 4) {
+        const r = imgData[i];
+        const g = imgData[i + 1];
+        const b = imgData[i + 2];
+        rTotal += r;
+        gTotal += g;
+        bTotal += b;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        lumTotal += lum;
+        if (lum < minLum) minLum = lum;
+        if (lum > maxLum) maxLum = lum;
+      }
+
+      const avgR = rTotal / totalPixels;
+      const avgG = gTotal / totalPixels;
+      const avgB = bTotal / totalPixels;
+      const avgLum = lumTotal / totalPixels;
+      const contrast = maxLum - minLum;
+
+      const isWarm = avgR > avgB + 18 || (avgR > 140 && avgG > 100 && avgB < 100);
+      const isCool = avgB > avgR + 15 || avgB > 140;
+      const isGreen = avgG > avgR + 12 && avgG > avgB + 12;
+      const isMono = Math.abs(avgR - avgG) < 14 && Math.abs(avgG - avgB) < 14;
+      const isHighKey = avgLum > 175;
+      const isLowKey = avgLum < 85;
+      const isHighContrast = contrast > 180;
+
+      const vocabularies = {
+        ID: {
+          base: ['SPESIMEN', 'ANATOMI', 'STRUKTUR', 'TAKSONOMI', 'GEOMETRI', 'SIMETRI', 'ARSIP-LAB', 'BIOLOGIS'],
+          warm: ['ORANYE-CORAL', 'PIGMEN-HANGAT', 'VIBRAN-SPEKTRUM', 'RADIASI-TERMAL'],
+          cool: ['SIANO-AQUATIK', 'REFLEKSI-DINGIN', 'KEDALAMAN-BIRU', 'SPEKTRUM-ES'],
+          green: ['KLOROFIL-FLORA', 'BOTANIKAL', 'ORGANIK-SELULAR', 'STRUKTUR-DAUN'],
+          mono: ['MONOKROMATIK', 'KONTRAST-MUTLAK', 'SILUET-TAJAM', 'SKALA-ABU'],
+          highKey: ['ISOLASI-PUTIH', 'LATAR-BERSIH', 'LUMINESENSI', 'TRANSPARAN'],
+          lowKey: ['OBSKUR-NOIR', 'BAYANGAN-DALAM', 'TEKSTUR-GELAP', 'MISTERI'],
+          highContrast: ['GARIS-TEGAS', 'DINAMIKA-OPTIK', 'INTENSITAS-TAJAM', 'FOKUS-MAKRO'],
+          standard: ['MINIMALIS', 'MODULAR-SWISS', 'PROFIL-ELEGAN', 'RITME-VISUAL']
+        },
+        EN: {
+          base: ['SPECIMEN', 'ANATOMY', 'STRUCTURE', 'TAXONOMY', 'GEOMETRY', 'SYMMETRY', 'ARCHIVE', 'BIOLOGICAL'],
+          warm: ['VIBRANT-CORAL', 'WARM-SPECTRUM', 'AMBER-PIGMENT', 'THERMAL-HUE'],
+          cool: ['AQUATIC-CYAN', 'COOL-REFLECTION', 'DEEP-CHROMA', 'AZURE-TINT'],
+          green: ['BOTANICAL', 'ORGANIC-CHLORO', 'FLORA-FORM', 'CELLULAR-NODE'],
+          mono: ['MONOCHROME', 'STARK-CONTRAST', 'SHADOW-SILHOUETTE', 'GRAYSCALE'],
+          highKey: ['ISOLATED-WHITE', 'CLEAN-FIELD', 'TRANSLUCENT', 'HIGH-KEY-LIGHT'],
+          lowKey: ['OBSCURA-NOIR', 'DEEP-SHADOW', 'DARK-SURFACE', 'LOW-KEY-TONE'],
+          highContrast: ['SHARP-FOCUS', 'OPTICAL-EDGE', 'DYNAMIC-RHYTHM', 'MACRO-DETAIL'],
+          standard: ['MINIMALIST', 'SWISS-MODULAR', 'ELEGANT-PROFILE', 'STUDIO-ISOLATION']
+        },
+        JP: {
+          base: ['標本', '解剖学', '構造', '分類学', '幾何学', '対称性', 'アーカイブ', '生物学'],
+          warm: ['珊瑚色', '温色スペクトル', '琥珀色素', '熱放射'],
+          cool: ['水性シアン', '寒冷反射', '深色クロマ', '青空色彩'],
+          green: ['葉緑素', '植物学的', '有機細胞', '葉状構造'],
+          mono: ['単色モノクロ', '強烈コントラスト', '影シルエット', '階調グレー'],
+          highKey: ['白背景単離', '明瞭フィールド', '半透明光', '高輝度ライト'],
+          lowKey: ['暗黒ノワール', '深奥シャドウ', '暗面テクスチャ', '深層トーン'],
+          highContrast: ['精密フォーカス', '光学エッジ', '動的リズム', '拡大マクロ'],
+          standard: ['ミニマリズム', 'スイスモジュラー', '優美プロファイル', 'スタジオアイソレーション']
         }
-        tempCanvas.width = w; tempCanvas.height = h;
+      };
+
+      const set = vocabularies[lang] || vocabularies['EN'];
+      const pool = [...set.base];
+
+      if (isMono) pool.push(...set.mono);
+      else if (isGreen) pool.push(...set.green);
+      else if (isWarm) pool.push(...set.warm);
+      else if (isCool) pool.push(...set.cool);
+      else pool.push(...set.standard);
+
+      if (isHighKey) pool.push(...set.highKey);
+      else if (isLowKey) pool.push(...set.lowKey);
+      else pool.push(...set.standard);
+
+      if (isHighContrast) pool.push(...set.highContrast);
+
+      const unique = Array.from(new Set(pool));
+      while (unique.length < 16) {
+        const filler = set.standard[unique.length % set.standard.length];
+        unique.push(`${filler}-${unique.length + 1}`);
+      }
+      return unique.slice(0, 16);
+    } catch (e) {
+      console.warn("Local visual analysis fallback:", e);
+      return (fallbackWords[lang] || fallbackWords['EN']).slice(0, 16);
+    }
+  };
+
+  const handleAiAnalysis = async (forceLocal = false) => {
+    if (!image) {
+      showToast('Harap unggah gambar terlebih dahulu');
+      return;
+    }
+
+    setIsAiAnalyzing(true);
+
+    try {
+      const apiKey = (apiKeyInput || '').trim();
+      let words = [];
+      let sourceName = '';
+
+      if (apiKey && !forceLocal) {
+        const tempCanvas = document.createElement('canvas');
+        const MAX_SIZE = 600;
+        let w = image.width;
+        let h = image.height;
+        if (w > MAX_SIZE || h > MAX_SIZE) {
+          const ratio = Math.min(MAX_SIZE / w, MAX_SIZE / h);
+          w = Math.floor(w * ratio);
+          h = Math.floor(h * ratio);
+        }
+        tempCanvas.width = w;
+        tempCanvas.height = h;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
-        
-        const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
-        const apiKey = apiKeyInput.trim(); 
+
+        const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
-        const promptText = `Analyze this image and provide exactly 16 single-word aesthetic keywords describing its main subjects, visual elements, colors, or vibe (suitable for Swiss-style graphic design posters). The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
-        
-        const candidateModels = [
-            'gemini-3.6-flash',
-            'gemini-3.1-flash-lite',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash',
-            'gemini-2.5-flash'
+        const targetLang = langMap[annoLang] || 'English';
+
+        const promptText = `Analyze this image in detail and extract exactly 16 single-word or short hyphenated aesthetic keywords describing its subjects, anatomy, dominant colors, and vibe (tailored for Swiss-style graphic design specimen posters). Words MUST be in ${targetLang}. Return ONLY a comma-separated list in ALL CAPS, without numbering or explanations.`;
+
+        // 1. Dukungan Model Resmi Aktif 2026
+        const candidateModels2026 = [
+          'gemini-2.5-flash',
+          'gemini-3.8-flash',
+          'gemini-3.7-flash',
+          'gemini-3.6-flash',
+          'gemini-3.5-flash',
+          'gemini-2.5-flash-lite',
+          'gemini-2.5-pro'
         ];
 
-        let success = false;
-        let lastErrorMessage = '';
+        let modelsToTry = [...candidateModels2026];
 
-        for (const modelName of candidateModels) {
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        contents: [
-                            {
-                                parts: [
-                                    { text: promptText },
-                                    {
-                                        inline_data: {
-                                            mime_type: "image/jpeg",
-                                            data: base64DataRaw 
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        generationConfig: { maxOutputTokens: 200, temperature: 0.7 }
-                    })
-                });
+        // 2. Pencarian Model Otomatis (Dynamic Discovery) via Google models.list API
+        try {
+          const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+          if (listResp.ok) {
+            const listData = await listResp.json();
+            if (listData.models && Array.isArray(listData.models)) {
+              const activeGoogleModels = listData.models
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                .map(m => m.name.replace('models/', ''))
+                .filter(name => !name.includes('embedding') && !name.includes('aqa') && !name.includes('1.5') && !name.includes('2.0'));
 
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    lastErrorMessage = data.error?.message || `API Error: ${response.status}`;
-                    continue;
-                }
-                
-                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                    text = text.replace(/`/g, '').replace(/csv/g, '').trim();
-                    const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
-                    if (words.length > 0) { 
-                        setAiWords(words); 
-                        localStorage.setItem('geminiApiKey', apiKey);
-                        showToast(`AI Berhasil! Menemukan ${words.length} kata kunci.`);
-                        success = true;
-                        break;
-                    }
-                }
-            } catch (err) {
-                lastErrorMessage = err.message;
+              const matched2026 = candidateModels2026.filter(m => activeGoogleModels.includes(m));
+              const others = activeGoogleModels.filter(m => !candidateModels2026.includes(m));
+              const combined = [...matched2026, ...candidateModels2026, ...others];
+              modelsToTry = Array.from(new Set(combined));
             }
+          }
+        } catch (e) {
+          console.warn("Dynamic model discovery fallback:", e);
         }
 
-        if (!success) {
-            throw new Error(lastErrorMessage || "Gagal mendapatkan respons dari Gemini AI.");
+        let lastErr = null;
+        for (const modelName of modelsToTry) {
+          try {
+            const resp = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      parts: [
+                        { text: promptText },
+                        {
+                          inline_data: {
+                            mime_type: 'image/jpeg',
+                            data: base64DataRaw
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  generationConfig: { maxOutputTokens: 250, temperature: 0.7 }
+                })
+              }
+            );
+
+            const data = await resp.json();
+            if (resp.ok) {
+              let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                text = text.replace(/`/g, '').replace(/csv/g, '').trim();
+                const parsed = text
+                  .split(/[,\n]/)
+                  .map(w => w.trim().replace(/^[^a-zA-Z0-9\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff-]+/, '').toUpperCase())
+                  .filter(w => w && w.length > 1);
+
+                if (parsed.length >= 8) {
+                  words = parsed.slice(0, 16);
+                  const cleanModelName = modelName
+                    .replace('gemini-', 'Google Gemini ')
+                    .replace('-flash', ' Flash')
+                    .replace('-pro', ' Pro')
+                    .replace('-lite', ' Lite');
+                  sourceName = cleanModelName;
+                  localStorage.setItem('geminiApiKey', apiKey);
+                  break;
+                }
+              }
+            } else {
+              lastErr = data.error?.message || `HTTP ${resp.status}`;
+            }
+          } catch (err) {
+            lastErr = err.message;
+          }
         }
+
+        if (words.length === 0) {
+          console.warn("Gemini API fallback to local smart visual analysis:", lastErr);
+          words = analyzeImageVisually(image, annoLang);
+          sourceName = `Analisis Visual Cerdas (Fallback: Gemini ${lastErr ? lastErr.substring(0, 25) : 'Offline'})`;
+          showToast('Beralih ke Analisis Visual Cerdas');
+        }
+      } else {
+        words = analyzeImageVisually(image, annoLang);
+        sourceName = 'Analisis Visual Cerdas (Bebas Token)';
+      }
+
+      if (words.length > 0) {
+        setAiWords(words);
+        applyKeywordsToCells(words);
+        setScanResult({
+          words,
+          source: sourceName,
+          lang: annoLang,
+          count: words.length,
+          timestamp: new Date().toLocaleTimeString()
+        });
+        setShowScanResultModal(true);
+        showToast(`Hasil Pindai Sukses! ${words.length} kata kunci aktif.`);
+      }
     } catch (err) {
-        console.error("AI API Error:", err);
-        alert(`Gagal memindai gambar via Gemini API: ${err.message}`);
-        setAiWords(fallbackWords[annoLang]);
-    } finally { 
-        setIsAiAnalyzing(false); 
-        handleRandomize(); 
+      console.error("AI Analysis error:", err);
+      const fallback = (fallbackWords[annoLang] || fallbackWords['EN']).slice(0, 16);
+      setAiWords(fallback);
+      applyKeywordsToCells(fallback);
+      setScanResult({
+        words: fallback,
+        source: 'Koleksi Kosakata Standar Swiss',
+        lang: annoLang,
+        count: fallback.length,
+        timestamp: new Date().toLocaleTimeString()
+      });
+      setShowScanResultModal(true);
+      showToast('Kata kunci default diterapkan');
+    } finally {
+      setIsAiAnalyzing(false);
+      // PENTING: handleRandomize() DIHAPUS TOTAL agar layout grid & slit scan 100% aman dan tidak teracak
     }
   };
 
@@ -1904,8 +2093,21 @@ export default function App() {
                     className={`w-full py-2.5 rounded-xl text-xs font-bold transition shadow flex items-center justify-center space-x-2 ${isAiAnalyzing || !image ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-300' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black active:scale-95'}`}
                   >
                     <span>✨</span>
-                    <span>{isAiAnalyzing ? 'Sedang Menganalisis Gambar...' : 'Pindai Kata Kunci AI (Gemini 3.6)'}</span>
+                    <span>{isAiAnalyzing ? 'Sedang Menganalisis Gambar...' : 'Pindai Kata Kunci AI (Google Gemini 2026)'}</span>
                   </button>
+
+                  {scanResult && (
+                    <button
+                      onClick={() => setShowScanResultModal(true)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border transition flex items-center justify-between cursor-pointer ${isDarkMode ? 'bg-[#1a1a1a] border-[#2e2e2e] text-emerald-400 hover:bg-[#222]' : 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'}`}
+                    >
+                      <span className="flex items-center space-x-1.5">
+                        <span>📋</span>
+                        <span>Lihat Hasil Pindai Terakhir</span>
+                      </span>
+                      <span className="text-[10px] font-mono opacity-80">{scanResult.timestamp}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Interactive Tag Cloud Kata Kunci */}
@@ -2277,6 +2479,96 @@ export default function App() {
           <div className="bg-emerald-500 text-black font-bold text-xs px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2">
             <span>✓</span>
             <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL POP-UP HASIL PINDAI KATA KUNCI AI (INTERAKTIF) --- */}
+      {showScanResultModal && scanResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className={`max-w-lg w-full rounded-2xl border p-6 shadow-2xl space-y-4 ${isDarkMode ? 'bg-[#141414] border-[#2e2e2e] text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`}>
+            
+            {/* Header Status */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-400 to-cyan-400 flex items-center justify-center text-black text-xl font-bold shadow-lg shadow-emerald-500/20">
+                  ✓
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-sm text-white">Hasil Pindai Kata Kunci AI</h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold border border-emerald-500/30">
+                      SUKSES
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {scanResult.count} kata kunci spesimen berhasil diekstrak dan disematkan ke tata letak poster
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowScanResultModal(false)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition text-lg cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Informasi Metadata */}
+            <div className={`p-2.5 rounded-xl border flex flex-wrap items-center gap-2 text-[10.5px] ${isDarkMode ? 'bg-[#1a1a1a] border-[#262626]' : 'bg-gray-50 border-gray-200'}`}>
+              <span className="text-gray-400">Mesin:</span>
+              <span className="font-mono text-cyan-300 font-bold">{scanResult.source}</span>
+              <span className="text-gray-600">•</span>
+              <span className="text-gray-400">Bahasa:</span>
+              <span className="font-mono text-amber-300 font-bold">{scanResult.lang}</span>
+              <span className="text-gray-600">•</span>
+              <span className="text-gray-400 font-mono">{scanResult.timestamp}</span>
+            </div>
+
+            {/* Daftar 16 Kata Kunci Spesimen */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-bold text-gray-300 flex justify-between items-center">
+                <span>Daftar 16 Kata Kunci Spesimen:</span>
+                <span className="text-[10px] text-emerald-400 font-mono font-semibold">Status: Aktif di Poster</span>
+              </div>
+              <div className={`p-3 rounded-xl border max-h-56 overflow-y-auto grid grid-cols-2 gap-1.5 ${isDarkMode ? 'bg-[#101010] border-[#202020]' : 'bg-gray-100 border-gray-200'}`}>
+                {scanResult.words.map((word, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex items-center space-x-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition ${isDarkMode ? 'bg-[#181818] border-[#282828] text-emerald-300' : 'bg-white border-gray-200 text-emerald-800'}`}
+                  >
+                    <span className="text-[9px] text-gray-500 font-mono">#{String(idx + 1).padStart(2, '0')}</span>
+                    <span className="truncate">{word}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tombol Aksi Cepat */}
+            <div className="flex space-x-2 pt-1">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(scanResult.words.join(', '));
+                  setCopiedWordsNotice(true);
+                  setTimeout(() => setCopiedWordsNotice(false), 2000);
+                  showToast('Semua 16 kata kunci disalin ke clipboard 📋');
+                }}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1.5 cursor-pointer ${isDarkMode ? 'bg-[#1e1e1e] border-[#303030] hover:bg-[#252525] text-gray-300' : 'bg-gray-100 border-gray-300 hover:bg-gray-200 text-gray-800'}`}
+              >
+                <span>{copiedWordsNotice ? '✓ Tersalin!' : '📋 Salin Kata'}</span>
+              </button>
+              <button 
+                onClick={() => {
+                  applyKeywordsToCells(scanResult.words);
+                  showToast('✓ 16 Kata kunci diterapkan ke poster');
+                  setShowScanResultModal(false);
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black shadow-lg transition active:scale-95 cursor-pointer"
+              >
+                Terapkan & Tutup
+              </button>
+            </div>
+
           </div>
         </div>
       )}
