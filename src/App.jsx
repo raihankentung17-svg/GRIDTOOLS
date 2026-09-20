@@ -25,11 +25,11 @@ const Ruler = ({ type, pan, zoom, length, isDarkMode }) => {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = isDarkMode ? '#1a1a1a' : '#F9FAFB'; 
+        ctx.fillStyle = isDarkMode ? '#121212' : '#F3F4F6'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = isDarkMode ? '#888888' : '#6B7280'; 
-        ctx.strokeStyle = isDarkMode ? '#333333' : '#D1D5DB'; 
+        ctx.fillStyle = isDarkMode ? '#777777' : '#6B7280'; 
+        ctx.strokeStyle = isDarkMode ? '#282828' : '#D1D5DB'; 
         ctx.font = '9px monospace';
         ctx.textBaseline = 'top';
         ctx.lineWidth = 1;
@@ -97,61 +97,87 @@ export default function App() {
   const [rotation, setRotation] = useState(0);
   const [seed, setSeed] = useState(12345);
   
-  const [activeTool, setActiveTool] = useState('pan'); 
+  // Navigation & Workspace Tools
+  const [activeTool, setActiveTool] = useState('pan'); // 'pan' | 'brush'
   const [isManualMode, setIsManualMode] = useState(false);
-  const [brushSize, setBrushSize] = useState(50);
+  const [brushTarget, setBrushTarget] = useState('card'); // 'card' | 'stretch'
+  const [brushSize, setBrushSize] = useState(65);
   const [viewScale, setViewScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
   
+  // UI Tabs & Modal States
+  const [activeTab, setActiveTab] = useState('boxes'); // 'boxes', 'slit', 'brush', 'ai', 'canvas'
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  // Dynamic Guides
   const [guides, setGuides] = useState([]);
   const [draggingGuide, setDraggingGuide] = useState(null); 
 
-  const maskPointsRef = useRef([]); 
+  // Masking Refs untuk Kuas
+  const stretchMaskPointsRef = useRef([]); 
+  const cardMaskPointsRef = useRef([]); 
   const isPaintingRef = useRef(false);
   const animationFrameId = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const viewportRef = useRef(null);
 
-  const [scale, setScale] = useState(80); 
-  const [complexity, setComplexity] = useState(60); 
+  // Slit-scan Core Parameters
+  const [scale, setScale] = useState(85); 
+  const [complexity, setComplexity] = useState(55); 
   const [density, setDensity] = useState(65);       
   const [stretchInt, setStretchInt] = useState(72); 
   const [brutalInt, setBrutalInt] = useState(25); 
   const [stretchDirX, setStretchDirX] = useState(true);
   const [stretchDirY, setStretchDirY] = useState(true);
-  const [showGridLines, setShowGridLines] = useState(true);
-  const [showTextAnnotations, setShowTextAnnotations] = useState(true);
+
+  // Kotak Pembingkai Scratch & Variasi Ukuran
+  const [showScratchBoxes, setShowScratchBoxes] = useState(true);
+  const [boxBorderWidth, setBoxBorderWidth] = useState(1);
+  const [boxBorderColor, setBoxBorderColor] = useState('auto'); // 'auto', '#000000', '#ffffff', '#10B981', '#00FFFF'
+  const [boxSizeVariety, setBoxSizeVariety] = useState('editorial'); // 'balanced', 'varied', 'editorial', 'bento'
+
+  // Kartu Cutout Solid
+  const [showCutoutCards, setShowCutoutCards] = useState(true);
+  const [cutoutCardColor, setCutoutCardColor] = useState('#FFFFFF');
+  const [cutoutCardOpacity, setCutoutCardOpacity] = useState(100);
+  const [cutoutCardDensity, setCutoutCardDensity] = useState(16);
+
+  // Tipografi Kolom Kotak
+  const [showBoxTypography, setShowBoxTypography] = useState(true);
+  const [boxFontFamily, setBoxFontFamily] = useState('sans'); // 'sans', 'mono', 'serif', 'grotesk', 'condensed'
+  const [boxNumberFormat, setBoxNumberFormat] = useState('plus'); // 'plus', 'standard', 'pad'
+  const [boxFontSize, setBoxFontSize] = useState(100);
+  
+  // Visual Overlays & Legacy
+  const [showGridLines, setShowGridLines] = useState(false);
+  const [showTextAnnotations, setShowTextAnnotations] = useState(false);
   const [textColor, setTextColor] = useState('#00FFFF'); 
   
   const [renderStyle, setRenderStyle] = useState('classic'); 
   const [canvasFormat, setCanvasFormat] = useState('original');
+  const [exportMultiplier, setExportMultiplier] = useState(1);
 
+  // AI State
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
   const [apiKeyInput, setApiKeyInput] = useState(''); 
-  const [toastMessage, setToastMessage] = useState(null);
-
-  const [accordions, setAccordions] = useState({
-      ops: true,
-      mode: true,
-      style: true,
-      ai: true,
-      slit: true,
-      visuals: true
-  });
-  const toggleAccordion = (key) => setAccordions(prev => ({ ...prev, [key]: !prev[key] }));
+  const [newKeywordInput, setNewKeywordInput] = useState('');
 
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHoveringWorkspace, setIsHoveringWorkspace] = useState(false);
 
+  // Kosakata Desain Kontemporer
   const fallbackWords = {
-    'ID': ['ALAM', 'VISUAL', 'GRID', 'STRUKTUR', 'DISTORSI', 'KONTUR', 'SINTETIS', 'ESTETIKA', 'FUTURISTIK', 'POSTER', 'EKSPERIMEN', 'STRETCH'],
-    'EN': ['GREEN', 'LEAF', 'NATURE', 'TEXT', 'SIMPLE', 'DESIGN', 'GRID', 'PLANT', 'BRANCH', 'FLAT', 'CLEAR', 'STRETCH'],
-    'JP': ['緑', '葉', '自然', 'テキスト', 'シンプル', 'デザイン', 'グリッド', '植物', '枝', 'フラット', 'クリア', 'ストレッチ']
+    'ID': ['RETRO', 'DIGITAL', 'GRID', 'STRUKTUR', 'ESTETIKA', 'MODERN', 'VIBE', 'STUDIO', 'FUTUR', 'KREATIF', 'VISUAL', 'FOKUS'],
+    'EN': ['RETRO', 'DIGITAL', 'GRID', 'STRUCTURE', 'AESTHETIC', 'MODERN', 'VIBE', 'STAY', 'WEIRD', 'CRINGE', 'SWAG', 'FUTURE', 'STUDIO', 'SYSTEM', 'TYPO', 'MOTION'],
+    'JP': ['レトロ', 'デジタル', 'グリッド', '構造', '美学', 'モダン', '未来', 'スタジオ', 'システム', 'タイポ', 'モーション', 'デザイン']
   };
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
 
@@ -177,6 +203,7 @@ export default function App() {
 
   useEffect(() => {
      setAiWords(fallbackWords[annoLang]);
+     handleRandomize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annoLang]);
 
@@ -185,23 +212,38 @@ export default function App() {
       if (savedKey) setApiKeyInput(savedKey);
   }, []);
 
+  // Keyboard Shortcuts Global
   useEffect(() => {
       const handleKeyDown = (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+          
           if (e.code === 'Space') {
-              if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
               e.preventDefault();
               setIsSpacePressed(true);
               if (isPaintingRef.current) isPaintingRef.current = false; 
-          } else if (e.code === 'KeyB' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+          } else if (e.key === 'b' || e.key === 'B') {
               setActiveTool('brush');
               setIsManualMode(true);
               showToast('Kuas Aktif (Mode Manual)');
-          } else if (e.code === 'KeyV' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+          } else if (e.key === 'h' || e.key === 'H') {
               setActiveTool('pan');
-          } else if (e.code === 'KeyR' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+              showToast('Hand Tool (Pan)');
+          } else if (e.key === 'r' || e.key === 'R') {
               handleRandomize();
+              showToast('Seed Diacak 🔀');
+          } else if (e.key === '1') {
+              applyPreset('editorial');
+          } else if (e.key === '2') {
+              applyPreset('cyber');
+          } else if (e.key === '3') {
+              applyPreset('zine');
+          } else if (e.key === '4') {
+              applyPreset('minimal');
+          } else if (e.key === '?') {
+              setShowShortcutsModal(prev => !prev);
           }
       };
+
       const handleKeyUp = (e) => {
           if (e.code === 'Space') {
               if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -210,7 +252,7 @@ export default function App() {
               setIsPanning(false); 
           }
       };
-      
+
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
       return () => {
@@ -227,7 +269,8 @@ export default function App() {
         img.onload = () => {
           setImage(img);
           setSeed(Math.random() * 10000); 
-          maskPointsRef.current = []; 
+          stretchMaskPointsRef.current = []; 
+          cardMaskPointsRef.current = []; 
           setViewScale(1);
           setPan({ x: 0, y: 0 });
           showToast('Gambar berhasil dimuat!');
@@ -241,33 +284,143 @@ export default function App() {
   const handleUpload = (e) => processFile(e.target.files[0]);
   const handleRotate = () => { 
     setRotation((prev) => (prev + 90) % 360); 
-    maskPointsRef.current = []; 
-    showToast('Kanvas diputar 90°');
+    stretchMaskPointsRef.current = []; 
+    cardMaskPointsRef.current = []; 
+    showToast('Kanvas Diputar 90°');
   };
   const handleRandomize = () => {
     setSeed(Math.random() * 10000);
-    showToast('Pola grid acak diperbarui');
+  };
+
+  // --- SAMPEL ESTETIK BAWAAN (Untuk Pengujian Instan 1-Klik) ---
+  const loadAestheticSample = () => {
+    const svgData = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#090d16"/>
+          <stop offset="35%" stop-color="#181534"/>
+          <stop offset="65%" stop-color="#4c1d95"/>
+          <stop offset="100%" stop-color="#be185d"/>
+        </linearGradient>
+        <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fde047"/>
+          <stop offset="45%" stop-color="#f97316"/>
+          <stop offset="100%" stop-color="#e11d48"/>
+        </radialGradient>
+        <linearGradient id="mountain" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#047857"/>
+          <stop offset="100%" stop-color="#06251b"/>
+        </linearGradient>
+      </defs>
+      <rect width="1080" height="1080" fill="url(#sky)"/>
+      <circle cx="540" cy="450" r="230" fill="url(#sun)"/>
+      <polygon points="0,880 260,570 540,830 820,510 1080,790 1080,1080 0,1080" fill="url(#mountain)" opacity="0.95"/>
+      <polygon points="0,940 370,720 730,970 1080,750 1080,1080 0,1080" fill="#031a13"/>
+      <text x="540" y="320" font-family="'Helvetica Neue', Arial, sans-serif" font-size="82" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="14">GRID STUDIO</text>
+      <text x="540" y="390" font-family="'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="700" fill="#38bdf8" text-anchor="middle" letter-spacing="8">VISUAL SLIT SCAN</text>
+    </svg>`;
+    const img = new Image();
+    img.onload = () => {
+      setImage(img);
+      setSeed(4821);
+      stretchMaskPointsRef.current = [];
+      cardMaskPointsRef.current = [];
+      setViewScale(1);
+      setPan({ x: 0, y: 0 });
+      applyPreset('editorial');
+      showToast('Gambar sampel estetik berhasil dimuat!');
+    };
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgData);
+  };
+
+  // --- PRESET SYSTEM (1-Klik Tampilan Siap Pakai) ---
+  const applyPreset = (presetName) => {
+    if (presetName === 'editorial') {
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('auto');
+      setBoxSizeVariety('editorial');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('plus');
+      setRenderStyle('classic');
+      setStretchInt(70);
+      setComplexity(50);
+      setDensity(70);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+      showToast('Preset: 📰 Editorial Grid diterapkan');
+    } else if (presetName === 'cyber') {
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(false);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#00FFFF');
+      setBoxSizeVariety('varied');
+      setBoxFontFamily('mono');
+      setBoxNumberFormat('pad');
+      setRenderStyle('glitch');
+      setStretchInt(85);
+      setTextColor('#00FFFF');
+      showToast('Preset: ⚡ Cyber Slit diterapkan');
+    } else if (presetName === 'zine') {
+      setShowScratchBoxes(true);
+      setShowBoxTypography(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#F8F7F2');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(2);
+      setBoxBorderColor('#000000');
+      setBoxSizeVariety('bento');
+      setBoxFontFamily('grotesk');
+      setBoxNumberFormat('standard');
+      setRenderStyle('zine');
+      setBrutalInt(45);
+      showToast('Preset: 📄 Brutal Zine diterapkan');
+    } else if (presetName === 'minimal') {
+      setShowScratchBoxes(false);
+      setShowBoxTypography(false);
+      setShowCutoutCards(false);
+      setRenderStyle('classic');
+      setStretchInt(60);
+      showToast('Preset: 🎛️ Raw Slit diterapkan');
+    }
   };
   
-  const handleExport = (format) => {
+  const handleExport = (format, multiplier = exportMultiplier) => {
+    setShowExportMenu(false);
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `grid-stretch-${Date.now()}.${format}`;
-    link.href = canvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
-    link.click();
-    showToast(`Ekspor ${format.toUpperCase()} berhasil diunduh!`);
+
+    if (multiplier === 1) {
+      const link = document.createElement('a');
+      link.download = `grid-studio-${Date.now()}.${format}`;
+      link.href = canvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
+      link.click();
+      showToast(`Ekspor Berhasil (${format.toUpperCase()} 1x)`);
+    } else {
+      const hiResCanvas = document.createElement('canvas');
+      hiResCanvas.width = canvas.width * multiplier;
+      hiResCanvas.height = canvas.height * multiplier;
+      const hCtx = hiResCanvas.getContext('2d');
+      hCtx.imageSmoothingEnabled = true;
+      hCtx.imageSmoothingQuality = 'high';
+      hCtx.drawImage(canvas, 0, 0, hiResCanvas.width, hiResCanvas.height);
+      const link = document.createElement('a');
+      link.download = `grid-studio-hires-${multiplier}x-${Date.now()}.${format}`;
+      link.href = hiResCanvas.toDataURL(`image/${format === 'jpg' ? 'jpeg' : 'png'}`, 1.0);
+      link.click();
+      showToast(`Ekspor Berhasil (${format.toUpperCase()} ${multiplier}x Hi-Res)`);
+    }
   };
 
   const handleAiAnalysis = async () => {
-    if (!image) {
-      showToast('Harap unggah gambar terlebih dahulu.');
-      return;
-    } 
-    if (!apiKeyInput || apiKeyInput.trim() === '') { 
-      showToast('Harap masukkan Gemini Token (API Key) Anda.'); 
-      return; 
-    }
+    if (!image) return; 
+    if (!apiKeyInput || apiKeyInput.trim() === '') { alert("Masukkan Token API Gemini Anda terlebih dahulu."); return; }
     setIsAiAnalyzing(true);
     
     try {
@@ -282,19 +435,25 @@ export default function App() {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(image, 0, 0, w, h);
         
-        const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.6).split(',')[1]; 
+        const base64DataRaw = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1]; 
         const apiKey = apiKeyInput.trim(); 
         const langMap = { 'ID': 'Indonesian', 'EN': 'English', 'JP': 'Japanese' };
-        const promptText = `Analyze this image and provide exactly 12 single-word aesthetic keywords describing its main subjects, colors, or vibe. The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
+        const promptText = `Analyze this image and provide exactly 16 single-word aesthetic keywords describing its main subjects, visual elements, colors, or vibe (suitable for Swiss-style graphic design posters). The words MUST be translated to ${langMap[annoLang]}. Return ONLY a comma-separated list of these words, in ALL CAPS.`;
         
-        // Coba model terbaru: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash
-        const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-        let data = null;
-        let lastError = null;
+        const candidateModels = [
+            'gemini-3.6-flash',
+            'gemini-3.1-flash-lite',
+            'gemini-2.0-flash',
+            'gemini-1.5-flash',
+            'gemini-2.5-flash'
+        ];
 
-        for (const model of models) {
+        let success = false;
+        let lastErrorMessage = '';
+
+        for (const modelName of candidateModels) {
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -302,49 +461,69 @@ export default function App() {
                             {
                                 parts: [
                                     { text: promptText },
-                                    { inline_data: { mime_type: "image/jpeg", data: base64DataRaw } }
+                                    {
+                                        inline_data: {
+                                            mime_type: "image/jpeg",
+                                            data: base64DataRaw 
+                                        }
+                                    }
                                 ]
                             }
                         ],
-                        generationConfig: { maxOutputTokens: 150, temperature: 0.7 }
+                        generationConfig: { maxOutputTokens: 200, temperature: 0.7 }
                     })
                 });
 
-                if (response.ok) {
-                    data = await response.json();
-                    break;
-                } else {
-                    const errData = await response.json().catch(() => ({}));
-                    lastError = errData.error?.message || `Status ${response.status}`;
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    lastErrorMessage = data.error?.message || `API Error: ${response.status}`;
+                    continue;
+                }
+                
+                let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    text = text.replace(/`/g, '').replace(/csv/g, '').trim();
+                    const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
+                    if (words.length > 0) { 
+                        setAiWords(words); 
+                        localStorage.setItem('geminiApiKey', apiKey);
+                        showToast(`AI Berhasil! Menemukan ${words.length} kata kunci.`);
+                        success = true;
+                        break;
+                    }
                 }
             } catch (err) {
-                lastError = err.message;
+                lastErrorMessage = err.message;
             }
         }
 
-        if (!data) {
-            throw new Error(lastError || 'Gagal menghubungi Gemini API.');
-        }
-        
-        let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-            text = text.replace(/`/g, '').replace(/csv/g, '').trim();
-            const words = text.split(',').map(w => w.trim().toUpperCase()).filter(w => w);
-            if (words.length > 0) { 
-                setAiWords(words); 
-                localStorage.setItem('geminiApiKey', apiKey);
-                showToast(`Pindai AI Sukses! Ditemukan ${words.length} kata estetika.`);
-            }
-        } else {
-            throw new Error("Respon kosong dari AI.");
+        if (!success) {
+            throw new Error(lastErrorMessage || "Gagal mendapatkan respons dari Gemini AI.");
         }
     } catch (err) {
         console.error("AI API Error:", err);
-        showToast(`Gagal Pindai AI: ${err.message}`);
+        alert(`Gagal memindai gambar via Gemini API: ${err.message}`);
         setAiWords(fallbackWords[annoLang]);
     } finally { 
         setIsAiAnalyzing(false); 
+        handleRandomize(); 
     }
+  };
+
+  const addCustomKeyword = (e) => {
+    e.preventDefault();
+    if (!newKeywordInput.trim()) return;
+    const cleanWord = newKeywordInput.trim().toUpperCase();
+    if (!aiWords.includes(cleanWord)) {
+      setAiWords(prev => [cleanWord, ...prev]);
+      showToast(`Kata "${cleanWord}" ditambahkan!`);
+    }
+    setNewKeywordInput('');
+  };
+
+  const removeKeyword = (wordToRemove) => {
+    setAiWords(prev => prev.filter(w => w !== wordToRemove));
   };
 
   const currentTool = isSpacePressed ? 'pan' : activeTool;
@@ -409,28 +588,61 @@ export default function App() {
     setDraggingGuide({ id: newId, type });
   };
 
-  // Menambahkan titik sapuan kuas (drag to paint kontinu)
   const addMaskPoint = (e) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       const nx = (e.clientX - rect.left) / rect.width;
       const ny = (e.clientY - rect.top) / rect.height;
-      maskPointsRef.current.push({ nx, ny, radius: brushSize });
+
+      const point = { nx, ny, radius: brushSize };
+
+      if (brushTarget === 'card') {
+          cardMaskPointsRef.current.push(point);
+      } else {
+          stretchMaskPointsRef.current.push(point);
+      }
+
       if (!animationFrameId.current) {
-          animationFrameId.current = requestAnimationFrame(() => { 
-            drawCanvas(); 
-            animationFrameId.current = null; 
-          });
+          animationFrameId.current = requestAnimationFrame(() => { drawCanvas(); animationFrameId.current = null; });
       }
   };
 
-  const clearMask = () => { 
-    maskPointsRef.current = []; 
-    drawCanvas(); 
-    showToast('Sapuan kuas dibersihkan');
+  const clearStretchMask = () => { stretchMaskPointsRef.current = []; drawCanvas(); showToast('Mask Stretch Dihapus'); };
+  const clearCardMask = () => { cardMaskPointsRef.current = []; drawCanvas(); showToast('Mask Kartu Dihapus'); };
+  const clearAllMasks = () => { stretchMaskPointsRef.current = []; cardMaskPointsRef.current = []; drawCanvas(); showToast('Semua Mask Kuas Dihapus'); };
+
+  const hexToRgba = (hex, opacityPercent) => {
+    if (!hex) return '#FFFFFF';
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const r = parseInt(c.substring(0, 2), 16) || 255;
+    const g = parseInt(c.substring(2, 4), 16) || 255;
+    const b = parseInt(c.substring(4, 6), 16) || 255;
+    const alpha = Math.max(0, Math.min(1, opacityPercent / 100));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
+  const getContrastTextColor = (hex) => {
+    if (!hex) return '#000000';
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    const r = parseInt(c.substring(0, 2), 16) || 255;
+    const g = parseInt(c.substring(2, 4), 16) || 255;
+    const b = parseInt(c.substring(4, 6), 16) || 255;
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return yiq >= 128 ? '#000000' : '#FFFFFF';
+  };
+
+  const fontFamilies = {
+    'sans': '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    'mono': '"JetBrains Mono", "SF Mono", "Courier New", Courier, monospace',
+    'serif': '"Playfair Display", "Times New Roman", Georgia, serif',
+    'grotesk': '"Arial Black", Impact, "Helvetica Neue", sans-serif',
+    'condensed': '"Arial Narrow", "Trebuchet MS", sans-serif'
+  };
+
+  // --- LOGIKA UTAMA PENGGAMBARAN KANVAS ---
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -438,20 +650,14 @@ export default function App() {
     
     if (!image) {
       const rect = canvas.parentElement.getBoundingClientRect();
-      canvas.width = rect.width || 800; canvas.height = rect.height || 600;
-      ctx.fillStyle = isDarkMode ? '#050505' : '#FFFFFF'; 
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = 'bold 20px monospace'; 
-      ctx.fillStyle = isDarkMode ? '#444' : '#9CA3AF';
-      ctx.fillText('UNGGAH GAMBAR DI PANEL KIRI UNTUK MEMULAI', canvas.width/2, canvas.height/2);
+      canvas.width = rect.width || 900; canvas.height = rect.height || 650;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
 
     const rng = mulberry32(seed);
     const isRotated = rotation % 180 !== 0;
     
-    // --- KODE LOGIKA FORMAT KANVAS ---
     const formats = {
         'original': { w: image.width, h: image.height },
         'square': { w: 1080, h: 1080 },
@@ -491,42 +697,78 @@ export default function App() {
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    // Partisi potongan grid acak (Cuts)
-    const numCols = Math.floor(10 + (complexity / 100) * 80);
-    const numRows = Math.floor(10 + (complexity / 100) * 80);
+    // Pembuatan Garis Potong (Cuts)
+    const numCols = Math.floor(6 + (complexity / 100) * 55);
+    const numRows = Math.floor(6 + (complexity / 100) * 55);
     
     let xCuts = [0, canvas.width];
-    for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
-    xCuts.sort((a,b) => a - b);
-    
     let yCuts = [0, canvas.height];
-    for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
-    yCuts.sort((a,b) => a - b);
 
-    // Stretch multiplier berkesinambungan: rentang 0-100% mengatur proporsi, >100% menembak bebas (overshoot)
+    if (boxSizeVariety === 'varied') {
+        const majorCols = Math.floor(numCols * 0.35);
+        for(let i = 0; i < majorCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
+        for(let i = 0; i < numCols - majorCols; i++) {
+            const anchor = xCuts[Math.floor(rng() * xCuts.length)];
+            const offset = (rng() - 0.5) * (canvas.width * 0.3);
+            const val = Math.max(10, Math.min(canvas.width - 10, Math.floor(anchor + offset)));
+            xCuts.push(val);
+        }
+        const majorRows = Math.floor(numRows * 0.35);
+        for(let i = 0; i < majorRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
+        for(let i = 0; i < numRows - majorRows; i++) {
+            const anchor = yCuts[Math.floor(rng() * yCuts.length)];
+            const offset = (rng() - 0.5) * (canvas.height * 0.3);
+            const val = Math.max(10, Math.min(canvas.height - 10, Math.floor(anchor + offset)));
+            yCuts.push(val);
+        }
+    } else if (boxSizeVariety === 'editorial') {
+        const divisionsX = [0.15, 0.35, 0.58, 0.78, 0.90];
+        divisionsX.forEach(ratio => {
+            if (rng() > 0.25) xCuts.push(Math.floor(canvas.width * (ratio + (rng() - 0.5) * 0.08)));
+        });
+        const divisionsY = [0.12, 0.30, 0.50, 0.72, 0.88];
+        divisionsY.forEach(ratio => {
+            if (rng() > 0.25) yCuts.push(Math.floor(canvas.height * (ratio + (rng() - 0.5) * 0.08)));
+        });
+        for(let i = 0; i < Math.floor(numCols * 0.6); i++) xCuts.push(Math.floor(rng() * canvas.width));
+        for(let i = 0; i < Math.floor(numRows * 0.6); i++) yCuts.push(Math.floor(rng() * canvas.height));
+    } else if (boxSizeVariety === 'bento') {
+        const stepX = canvas.width / 4;
+        const stepY = canvas.height / 4;
+        for(let s = 1; s < 4; s++) {
+            xCuts.push(Math.floor(s * stepX + (rng() - 0.5) * (stepX * 0.35)));
+            yCuts.push(Math.floor(s * stepY + (rng() - 0.5) * (stepY * 0.35)));
+        }
+        for(let i = 0; i < Math.floor(numCols * 0.45); i++) xCuts.push(Math.floor(rng() * canvas.width));
+        for(let i = 0; i < Math.floor(numRows * 0.45); i++) yCuts.push(Math.floor(rng() * canvas.height));
+    } else {
+        for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
+        for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
+    }
+
+    xCuts = Array.from(new Set(xCuts)).sort((a,b) => a - b);
+    yCuts = Array.from(new Set(yCuts)).sort((a,b) => a - b);
+
     const stretchProb = Math.min(stretchInt, 100) / 100; 
-    const stretchMultiplier = stretchInt <= 100 
-        ? Math.max(0.1, stretchInt / 100) 
-        : 1 + ((stretchInt - 100) / 40) * 8;
-
-    const pEmpty = (1 - (density / 100)) * 0.6; 
+    const stretchMultiplier = stretchInt > 100 ? 1 + ((stretchInt - 100) / 50) * 15 : 1;
+    const pCardCutout = showCutoutCards ? (cutoutCardDensity / 100) * 0.4 : 0;
     const maxThick = Math.max(1, Math.floor((brutalInt / 100) * 20 * relScale)); 
 
-    // Pemeriksaan apakah sebuah sel disentuh oleh sapuan kuas
-    const checkMask = (testNX, testNY) => {
-        if (maskPointsRef.current.length === 0) return false;
+    const checkMask = (testNX, testNY, maskArray) => {
+        if (!maskArray || maskArray.length === 0) return false;
         const aspect = canvas.width / canvas.height;
-        for (let pt of maskPointsRef.current) {
-            const normRadius = (pt.radius / 100) * 0.12; 
+        for (let pt of maskArray) {
+            const normRadius = (pt.radius / 100) * 0.10; 
             const dx = pt.nx - testNX; 
             const dy = (pt.ny - testNY) / aspect; 
-            if ((dx*dx + dy*dy) < (normRadius * normRadius)) return true;
+            if (Math.sqrt(dx*dx + dy*dy) < normRadius) return true;
         }
         return false;
     };
 
     const normalPass = [];
     const stretchPass = [];
+    const cutoutCardPass = [];
 
     for (let i = 0; i < xCuts.length - 1; i++) {
         for (let j = 0; j < yCuts.length - 1; j++) {
@@ -539,20 +781,23 @@ export default function App() {
             const cellCenterNY = (y + h / 2) / canvas.height;
 
             let applyStretch = false;
-            let applyEmpty = false;
+            let applyCard = false;
 
             if (isManualMode) {
-                applyStretch = checkMask(cellCenterNX, cellCenterNY);
+                applyCard = checkMask(cellCenterNX, cellCenterNY, cardMaskPointsRef.current);
+                applyStretch = checkMask(cellCenterNX, cellCenterNY, stretchMaskPointsRef.current);
             } else {
                 const r = rng();
-                if (r < pEmpty) applyEmpty = true;
-                else if (r < pEmpty + stretchProb) applyStretch = true;
+                if (showCutoutCards && r < pCardCutout && w >= 28 * relScale && h >= 20 * relScale) {
+                    applyCard = true;
+                } else if (r < pCardCutout + stretchProb) {
+                    applyStretch = true;
+                }
             }
 
-            if (applyEmpty) {
-                normalPass.push({ type: 'empty', x, y, dstW, dstH });
-            } 
-            else if (applyStretch) {
+            if (applyCard) {
+                cutoutCardPass.push({ x, y, w, h, dstW, dstH });
+            } else if (applyStretch) {
                 let isHoriz = rng() > 0.5;
                 if (!stretchDirX && stretchDirY) isHoriz = false;
                 if (stretchDirX && !stretchDirY) isHoriz = true;
@@ -588,15 +833,12 @@ export default function App() {
         ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
     }
 
+    // Pass 1: Gambar Normal
     normalPass.forEach(op => {
-        if (op.type === 'empty') {
-            ctx.fillStyle = isDarkMode ? '#000000' : '#FFFFFF';
-            ctx.fillRect(op.x, op.y, op.dstW, op.dstH);
-        } else {
-            ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
-        }
+        ctx.drawImage(offscreen, op.x, op.y, op.w, op.h, op.x, op.y, op.dstW, op.dstH);
     });
 
+    // Pass 2: Gambar Slit-Scan Streaks
     stretchPass.forEach(op => {
         let srcX = op.x; let srcY = op.y;
         let srcW = op.w; let srcH = op.h;
@@ -647,6 +889,19 @@ export default function App() {
 
     ctx.filter = 'none';
 
+    // Pass 3: Kartu Cutout Solid
+    if (cutoutCardPass.length > 0) {
+        ctx.save();
+        const cardFillStyle = hexToRgba(cutoutCardColor, cutoutCardOpacity);
+        ctx.fillStyle = cardFillStyle;
+
+        cutoutCardPass.forEach(card => {
+            ctx.fillRect(card.x, card.y, card.w, card.h);
+        });
+        ctx.restore();
+    }
+
+    // Pass 4: Tekstur Zine Grain
     if (renderStyle === 'zine') {
         const noiseCnv = document.createElement('canvas');
         noiseCnv.width = 100; noiseCnv.height = 100;
@@ -667,35 +922,122 @@ export default function App() {
         ctx.restore();
     }
 
+    // Kotak Bingkai
+    if (showScratchBoxes) {
+        ctx.save();
+        const strokeW = Math.max(1, Math.floor(boxBorderWidth * relScale));
+        ctx.lineWidth = strokeW;
+
+        const boxesToStroke = [...stretchPass, ...cutoutCardPass];
+
+        boxesToStroke.forEach(box => {
+            if (boxBorderColor === 'auto') {
+                if (cutoutCardPass.includes(box)) {
+                    ctx.strokeStyle = getContrastTextColor(cutoutCardColor) === '#000000' 
+                        ? 'rgba(0,0,0,0.85)' 
+                        : 'rgba(255,255,255,0.85)';
+                } else {
+                    ctx.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.75)';
+                }
+            } else {
+                ctx.strokeStyle = boxBorderColor;
+            }
+
+            ctx.strokeRect(Math.floor(box.x) + 0.5, Math.floor(box.y) + 0.5, Math.floor(box.w), Math.floor(box.h));
+        });
+
+        ctx.restore();
+    }
+
+    // Tipografi Kolom Kotak
+    if (showBoxTypography) {
+        ctx.save();
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        const labeledBoxes = [];
+        cutoutCardPass.forEach(card => labeledBoxes.push({ ...card, isCard: true }));
+        stretchPass.forEach(box => {
+            if (box.w >= 32 * relScale && box.h >= 22 * relScale) {
+                labeledBoxes.push({ ...box, isCard: false });
+            }
+        });
+
+        labeledBoxes.sort((a, b) => {
+            if (Math.abs(a.y - b.y) > 40 * relScale) return a.y - b.y;
+            return a.x - b.x;
+        });
+
+        const fontScale = boxFontSize / 100;
+        const mainFontSize = Math.max(8, Math.floor(12 * relScale * fontScale));
+        const subFontSize = Math.max(7, Math.floor(9.5 * relScale * fontScale));
+        const padX = Math.max(3, Math.floor(4 * relScale));
+        const padY = Math.max(2, Math.floor(3 * relScale));
+        const currentFontFamily = fontFamilies[boxFontFamily] || fontFamilies['sans'];
+
+        let indexCounter = 1;
+
+        labeledBoxes.forEach((box, idx) => {
+            const word = aiWords[idx % aiWords.length] || 'GRID';
+            
+            let numDisplay;
+            if (boxNumberFormat === 'plus') {
+                numDisplay = indexCounter === 1 ? '1' : `${indexCounter}+`;
+            } else if (boxNumberFormat === 'pad') {
+                numDisplay = String(indexCounter).padStart(2, '0');
+            } else {
+                numDisplay = `${indexCounter}`;
+            }
+
+            let textFill;
+            if (box.isCard) {
+                textFill = getContrastTextColor(cutoutCardColor);
+            } else {
+                textFill = isDarkMode ? '#FFFFFF' : '#000000';
+            }
+
+            ctx.fillStyle = textFill;
+
+            ctx.font = `800 ${mainFontSize}px ${currentFontFamily}`;
+            const maxTextW = box.w - padX * 2;
+            let renderWord = word;
+            if (ctx.measureText(renderWord).width > maxTextW && renderWord.length > 4) {
+                renderWord = renderWord.substring(0, Math.max(3, Math.floor(maxTextW / (mainFontSize * 0.65)))) + '.';
+            }
+            ctx.fillText(renderWord, Math.floor(box.x + padX), Math.floor(box.y + padY));
+
+            if (box.h >= (mainFontSize + subFontSize + padY * 2)) {
+                ctx.font = `700 ${subFontSize}px ${currentFontFamily}`;
+                ctx.fillText(numDisplay, Math.floor(box.x + padX), Math.floor(box.y + padY + mainFontSize + Math.floor(2 * relScale)));
+            }
+
+            indexCounter += (idx % 3 === 0 ? 1 : (idx % 2 === 0 ? 2 : 3));
+        });
+
+        ctx.restore();
+    }
+
     if (showGridLines) {
+        ctx.save();
         ctx.fillStyle = isDarkMode ? '#10B981' : '#000000';
         ctx.lineWidth = Math.max(1, Math.floor(1 * relScale * 0.5));
         ctx.strokeStyle = isDarkMode ? 'rgba(16,185,129,0.3)' : 'rgba(0,0,0,0.3)';
         
         xCuts.forEach(x => {
            if(rng() > 0.8) { 
-               if(isManualMode && !checkMask(x/canvas.width, 0.5)) return;
                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); 
            }
         });
         yCuts.forEach(y => {
            if(rng() > 0.8) { 
-               if(isManualMode && !checkMask(0.5, y/canvas.height)) return;
                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); 
            }
         });
-
-        for (let i = 0; i < 5; i++) {
-            const bx = xCuts[Math.floor(rng() * (xCuts.length - 2))];
-            const by = yCuts[Math.floor(rng() * (yCuts.length - 2))];
-            if (isManualMode && !checkMask(bx/canvas.width, by/canvas.height)) continue;
-            const bw = ((rng() > 0.5) ? (rng() * 100 + 20) : (xCuts[xCuts.indexOf(bx) + 1] - bx));
-            const bh = ((rng() > 0.5) ? (rng() * 100 + 20) : (yCuts[yCuts.indexOf(by) + 1] - by));
-            if (rng() > 0.3) ctx.fillRect(bx, by, bw, bh);
-        }
+        ctx.restore();
     }
 
     if (showTextAnnotations) {
+        ctx.save();
         ctx.textAlign = 'left';
         const maxAnnotations = Math.floor(15 * (density/100));
         let count = 0;
@@ -712,307 +1054,731 @@ export default function App() {
             if (rng() > 0.7) {
                 const y = yCuts[j];
                 const x = xCuts[Math.floor(rng() * (xCuts.length - 5)) + 2];
-                if (isManualMode && !checkMask(x/canvas.width, y/canvas.height)) continue;
                 
                 const word = aiWords[Math.floor(rng() * aiWords.length)];
                 const num = Math.floor(rng() * 50) + 1;
                 
                 ctx.fillStyle = textColor;
-                ctx.font = `900 ${mainFont}px monospace, sans-serif`;
+                ctx.font = `900 ${mainFont}px sans-serif`;
                 ctx.fillText(word, x, y - spacing1);
-                ctx.font = `${subFont}px monospace, sans-serif`;
+                ctx.font = `${subFont}px sans-serif`;
                 ctx.fillText(`${num}+`, x, y + spacing2);
                 ctx.fillRect(x, y + spacing3, barWidth, barHeight);
                 count++;
             }
         }
+        ctx.restore();
     }
-  }, [image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY, showGridLines, showTextAnnotations, textColor, isManualMode, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat]);
+  }, [
+    image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY,
+    showScratchBoxes, showBoxTypography, showCutoutCards, boxBorderWidth, boxBorderColor, boxSizeVariety,
+    cutoutCardColor, cutoutCardOpacity, cutoutCardDensity, boxFontFamily, boxNumberFormat, boxFontSize,
+    showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat
+  ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
 
   return (
-    <div className={`flex flex-col-reverse md:flex-row h-[100dvh] md:h-screen font-sans overflow-hidden transition-colors ${isDarkMode ? 'bg-[#050505] text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'}`}>
+    <div 
+      className={`flex flex-col h-screen w-screen font-sans overflow-hidden select-none transition-colors ${isDarkMode ? 'bg-[#0a0a0a] text-[#e5e5e5]' : 'bg-[#F9FAFB] text-gray-900'}`}
+      onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+      onDragLeave={() => setIsDraggingOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          processFile(e.dataTransfer.files[0]);
+        }
+      }}
+    >
       
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-3 duration-200 pointer-events-none">
-          <div className="bg-[#10B981] text-black font-bold text-xs px-4 py-2 rounded-lg shadow-2xl flex items-center space-x-2">
-            <span>✨</span>
-            <span>{toastMessage}</span>
-          </div>
-        </div>
-      )}
-
-      {/* --- PANEL KIRI --- */}
-      <div className={`w-full md:w-[340px] h-[60dvh] md:h-full shadow-2xl flex flex-col z-10 overflow-y-auto border-t md:border-t-0 md:border-r flex-shrink-0 transition-colors duration-200 
-                      ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-white border-gray-200'}`}>
+      {/* --- TOP APPLICATION BAR --- */}
+      <header className={`h-14 border-b px-4 flex items-center justify-between z-30 flex-shrink-0 transition-colors ${isDarkMode ? 'bg-[#121212] border-[#202020]' : 'bg-white border-gray-200'}`}>
         
-        {/* Header */}
-        <div className={`p-6 border-b flex justify-between items-start transition-colors duration-200 ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-50 border-gray-100'}`}>
-          <div>
-            <h1 className={`text-xl font-bold tracking-tight font-mono ${isDarkMode ? 'text-[#10B981]' : 'text-gray-900'}`}>GRID STUDIO</h1>
-            <p className={`text-xs mt-1 font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Generative Distortion Engine</p>
+        {/* Logo & Meta Info */}
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center font-black text-black text-xs shadow-md">
+              G
+            </div>
+            <span className="font-mono font-black text-sm tracking-wider">GRID<span className="text-emerald-500">STUDIO</span></span>
           </div>
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`p-2 rounded-md transition-colors ${isDarkMode ? 'bg-[#333] hover:bg-[#444] text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`} title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-             {isDarkMode ? '☀️' : '🌙'}
-          </button>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDarkMode ? 'bg-[#181818] text-emerald-400 border-[#2a2a2a]' : 'bg-gray-100 text-emerald-800 border-gray-200'}`}>
+            PRO v2.5
+          </span>
+          {image && (
+            <span className={`hidden md:inline-flex items-center text-[10px] font-mono font-medium px-2 py-0.5 rounded ${isDarkMode ? 'bg-[#181818] text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
+              {image.width} × {image.height}px • {canvasFormat.toUpperCase()}
+            </span>
+          )}
         </div>
 
-        <div className="p-6 flex-1 flex flex-col space-y-7">
+        {/* Quick Presets Bar (Tengah) */}
+        <div className="hidden lg:flex items-center space-x-1.5 p-1 rounded-lg border bg-opacity-50" style={{ backgroundColor: isDarkMode ? '#161616' : '#f3f4f6', borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+          {[
+            { id: 'editorial', label: '📰 Editorial', shortcut: '1' },
+            { id: 'cyber', label: '⚡ Cyber', shortcut: '2' },
+            { id: 'zine', label: '📄 Zine', shortcut: '3' },
+            { id: 'minimal', label: '🎛️ Raw Slit', shortcut: '4' }
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p.id)}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1.5 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
+            >
+              <span>{p.label}</span>
+              <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#262626] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Action Controls Kanan */}
+        <div className="flex items-center space-x-2">
           
-          {/* Section 1: Image Operations */}
-          <div className="space-y-4">
-            <button onClick={() => toggleAccordion('ops')} className="w-full flex items-center justify-between focus:outline-none">
-              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Image Operations</h2>
-              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ops ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          {/* Tombol Acak / Randomize */}
+          <button
+            onClick={handleRandomize}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all flex items-center space-x-1.5 active:scale-95 ${isDarkMode ? 'bg-[#1a1a1a] border-[#2e2e2e] text-gray-300 hover:text-white hover:border-[#10B981]' : 'bg-gray-50 border-gray-200 text-gray-800 hover:bg-white shadow-sm'}`}
+            title="Acak Pola Slit-Scan (Shortcut: R)"
+          >
+            <span className="text-emerald-500">🔀</span>
+            <span className="hidden sm:inline">Randomize</span>
+            <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#252525] text-gray-400' : 'bg-gray-200 text-gray-600'}`}>{Math.round(seed) % 1000}</span>
+          </button>
+
+          {/* Theme Toggle */}
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)} 
+            className={`p-1.5 rounded-lg border transition-all ${isDarkMode ? 'bg-[#1a1a1a] border-[#2e2e2e] text-yellow-400 hover:bg-[#222]' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+            title="Ganti Tema (Dark / Light)"
+          >
+            {isDarkMode ? '☀️' : '🌙'}
+          </button>
+
+          {/* Export Dropdown Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 transition-all flex items-center space-x-1.5 active:scale-95 cursor-pointer"
+            >
+              <span>Export</span>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7"></path></svg>
             </button>
-            {accordions.ops && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <button onClick={() => fileInputRef.current.click()} className={`w-full py-3.5 rounded-lg font-bold transition shadow-lg active:scale-95 cursor-pointer ${isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-black text-white hover:bg-gray-800'}`}>
-                  Upload Image
+
+            {showExportMenu && (
+              <div 
+                className={`absolute right-0 mt-2 w-52 rounded-xl shadow-2xl border p-1.5 z-50 animate-in fade-in duration-150 ${isDarkMode ? 'bg-[#181818] border-[#2e2e2e] text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`}
+                onMouseLeave={() => setShowExportMenu(false)}
+              >
+                <div className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Standar (1x Canvas)
+                </div>
+                <button onClick={() => handleExport('png', 1)} className={`w-full text-left px-2.5 py-2 text-xs font-medium rounded-lg flex items-center justify-between ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-50'}`}>
+                  <span>Export PNG</span>
+                  <span className="text-[10px] opacity-60 font-mono">Web / Social</span>
                 </button>
-                <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
-                <div className="flex space-x-3">
-                  <button onClick={handleRotate} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition cursor-pointer ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>↻ Rotate</button>
-                  <button onClick={handleRandomize} className={`flex-1 text-sm py-2.5 rounded-md font-medium transition cursor-pointer ${isDarkMode ? 'bg-[#222] text-[#ccc] hover:bg-[#333] border border-[#333]' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}>🔀 Randomize</button>
+                <button onClick={() => handleExport('jpg', 1)} className={`w-full text-left px-2.5 py-2 text-xs font-medium rounded-lg flex items-center justify-between ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-50'}`}>
+                  <span>Export JPG</span>
+                  <span className="text-[10px] opacity-60 font-mono">Small Size</span>
+                </button>
+
+                <div className={`my-1 border-t ${isDarkMode ? 'border-[#282828]' : 'border-gray-100'}`}></div>
+
+                <div className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-500`}>
+                  Cetak / Print (2x Hi-Res)
                 </div>
+                <button onClick={() => handleExport('png', 2)} className={`w-full text-left px-2.5 py-2 text-xs font-bold rounded-lg flex items-center justify-between ${isDarkMode ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
+                  <span>Export 2x Hi-Res PNG</span>
+                  <span className="text-[10px] font-mono">Poster Ready</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </header>
+
+      {/* --- MAIN WORKSPACE BODY (TABBED SIDEBAR + CANVAS) --- */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        {/* --- TABBED STUDIO INSPECTOR (SIDEBAR KIRI) --- */}
+        <aside className={`w-full md:w-[380px] h-[50dvh] md:h-full flex flex-col border-r z-20 flex-shrink-0 transition-colors ${isDarkMode ? 'bg-[#0f0f0f] border-[#1c1c1c]' : 'bg-white border-gray-200'}`}>
+          
+          {/* TAB BAR HEADER */}
+          <div className={`flex border-b overflow-x-auto no-scrollbar transition-colors ${isDarkMode ? 'bg-[#121212] border-[#1e1e1e]' : 'bg-gray-50 border-gray-200'}`}>
+            {[
+              { id: 'boxes', label: 'Kotak & Typo', icon: '🗂️' },
+              { id: 'slit', label: 'Distorsi FX', icon: '🌊' },
+              { id: 'brush', label: 'Kuas', icon: '🖌️' },
+              { id: 'ai', label: 'Gemini AI', icon: '✨' },
+              { id: 'canvas', label: 'Kanvas', icon: '📐' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex-1 min-w-[70px] py-3 text-center border-b-2 font-bold text-xs transition-all flex flex-col items-center space-y-1 cursor-pointer ${activeTab === tab.id ? (isDarkMode ? 'border-emerald-400 text-emerald-400 bg-[#161616]' : 'border-black text-black bg-white') : (isDarkMode ? 'border-transparent text-gray-500 hover:text-gray-300' : 'border-transparent text-gray-400 hover:text-gray-700')}`}
+              >
+                <span className="text-sm">{tab.icon}</span>
+                <span className="text-[10px] tracking-tight">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* TAB CONTENT CONTAINER */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            
+            {/* ================= TAB 1: KOTAK & TYPO ================= */}
+            {activeTab === 'boxes' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
                 
-                {/* Canvas Format */}
-                <div className="mb-4 mt-4">
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                        <span>Canvas Format</span>
+                {/* 1. KARTU CUTOUT SOLID */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold flex items-center space-x-1.5">
+                        <span>🗂️</span>
+                        <span>Kartu Cutout Solid</span>
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Kartu berwarna dengan label kontras</div>
                     </div>
-                    <select 
-                        value={canvasFormat} 
-                        onChange={(e) => setCanvasFormat(e.target.value)}
-                        className={`w-full text-xs p-2.5 border rounded-md focus:outline-none appearance-none cursor-pointer ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-gray-50 border-gray-300 text-gray-900 focus:border-blue-500'}`}
-                    >
-                        <option value="original">Original Image</option>
-                        <option value="square">Square (1080 x 1080) - Feed</option>
-                        <option value="portrait">Portrait (1080 x 1350) - IG</option>
-                        <option value="landscape">Landscape (1920 x 1080) - Video/Web</option>
-                        <option value="story">Story / Reels (1080 x 1920)</option>
-                        <option value="a4">A4 Zine Poster (1240 x 1754)</option>
-                    </select>
-                </div>
+                    <input 
+                      type="checkbox" 
+                      checked={showCutoutCards} 
+                      onChange={(e) => setShowCutoutCards(e.target.checked)} 
+                      className="w-4.5 h-4.5 accent-amber-400 cursor-pointer" 
+                    />
+                  </div>
 
-                <div className="pt-2">
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                        <span>Image Scale (Bleed)</span>
-                        <span className={`px-2 py-0.5 rounded font-mono ${isDarkMode ? 'bg-[#222] text-[#00FFFF]' : 'bg-gray-100 text-gray-600'}`}>{scale}%</span>
-                    </div>
-                    <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
-                </div>
-              </div>
-            )}
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          {/* Section 2: Render Style */}
-          <div className="space-y-4">
-            <button onClick={() => toggleAccordion('style')} className="w-full flex items-center justify-between focus:outline-none">
-                <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Render Style</h2>
-                <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.style ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {accordions.style && (
-                <div className="grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                    {[
-                        { id: 'classic', label: 'Classic' },
-                        { id: 'glitch', label: 'Glitch' },
-                        { id: 'liquid', label: 'Liquid' },
-                        { id: 'zine', label: 'Zine' }
-                    ].map(style => (
-                        <button
-                            key={style.id}
-                            onClick={() => setRenderStyle(style.id)}
-                            className={`px-2 py-2.5 text-[10px] font-bold uppercase tracking-widest rounded transition-all cursor-pointer
-                                ${renderStyle === style.id
-                                    ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-black text-white shadow-md')
-                                    : (isDarkMode ? 'bg-[#111] text-[#888] border border-[#333] hover:text-[#ccc] hover:bg-[#222]' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:text-gray-700 hover:bg-gray-200')
-                                }`}
-                        >
-                            {style.label}
-                        </button>
-                    ))}
-                </div>
-            )}
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          {/* Section 3: Effect Spread Mode (Auto / Manual Brush) */}
-          <div className="space-y-4">
-            <button onClick={() => toggleAccordion('mode')} className="w-full flex items-center justify-between focus:outline-none">
-              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Effect Spread Mode</h2>
-              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.mode ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {accordions.mode && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
-                    <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all cursor-pointer ${!isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Auto (Random)</button>
-                    <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all cursor-pointer ${isManualMode ? (isDarkMode ? 'bg-[#222] text-[#10B981] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-500 hover:text-gray-700')}`}>Manual (Brush)</button>
-                </div>
-                {isManualMode && (
-                    <div className={`p-4 border rounded-lg space-y-4 ${isDarkMode ? 'bg-[#0a0a0a] border-[#00FFFF]/30' : 'bg-blue-50 border-blue-100'}`}>
-                        <p className={`text-[11px] font-medium leading-relaxed ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-700'}`}>🖌️ Tahan kursor & sapukan perlahan di atas gambar untuk melukis efek slit scan.</p>
-                        <div>
-                            <div className={`flex justify-between text-[10px] font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>
-                                <span>Brush Size</span><span className={`${isDarkMode ? 'text-[#00FFFF] font-mono' : ''}`}>{brushSize}px</span>
-                            </div>
-                            <input type="range" min="10" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
+                  {showCutoutCards && (
+                    <div className="space-y-3 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      {/* Palet Warna Kartu */}
+                      <div>
+                        <div className={`text-[11px] font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Warna Latar Kartu:</div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[
+                            { hex: '#FFFFFF', label: 'Putih' },
+                            { hex: '#F8F7F2', label: 'Krem' },
+                            { hex: '#FEF08A', label: 'Kuning' },
+                            { hex: '#BAE6FD', label: 'Biru' },
+                            { hex: '#BBF7D0', label: 'Mint' },
+                            { hex: '#FBCFE8', label: 'Pink' },
+                            { hex: '#18181B', label: 'Hitam' }
+                          ].map(item => (
+                            <button
+                              key={item.hex}
+                              onClick={() => setCutoutCardColor(item.hex)}
+                              className={`h-7 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all ${cutoutCardColor.toUpperCase() === item.hex ? 'ring-2 ring-emerald-500 scale-105 shadow-md' : 'opacity-85 hover:opacity-100'}`}
+                              style={{ backgroundColor: item.hex, color: getContrastTextColor(item.hex), borderColor: isDarkMode ? '#444' : '#ccc' }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                          <label className={`h-7 rounded-md flex items-center justify-center text-[10px] font-bold border cursor-pointer relative overflow-hidden ${isDarkMode ? 'bg-[#1f1f1f] border-[#333] text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-700'}`}>
+                            <span>Custom</span>
+                            <input 
+                              type="color" 
+                              value={cutoutCardColor} 
+                              onChange={(e) => setCutoutCardColor(e.target.value)} 
+                              className="absolute opacity-0 inset-0 w-full h-full cursor-pointer" 
+                            />
+                          </label>
                         </div>
-                        <button onClick={clearMask} className={`w-full text-[11px] py-2.5 rounded-md font-bold transition cursor-pointer ${isDarkMode ? 'bg-[#222] border border-[#333] text-[#ccc] hover:bg-[#333]' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}>🗑️ Clear Selection</button>
+                      </div>
+
+                      {/* Opasitas */}
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <span>Opasitas Kartu (Solid / Glass)</span>
+                          <span className="font-mono text-amber-400">{cutoutCardOpacity}%</span>
+                        </div>
+                        <input 
+                          type="range" min="30" max="100" value={cutoutCardOpacity} 
+                          onChange={(e) => setCutoutCardOpacity(Number(e.target.value))} 
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400" 
+                        />
+                      </div>
+
+                      {/* Kepadatan Kartu Auto */}
+                      {!isManualMode && (
+                        <div>
+                          <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <span>Kepadatan Kartu Otomatis</span>
+                            <span className="font-mono text-amber-400">{cutoutCardDensity}%</span>
+                          </div>
+                          <input 
+                            type="range" min="5" max="40" value={cutoutCardDensity} 
+                            onChange={(e) => setCutoutCardDensity(Number(e.target.value))} 
+                            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-amber-400" 
+                          />
+                        </div>
+                      )}
                     </div>
-                )}
+                  )}
+                </div>
+
+                {/* 2. KOTAK BINGKAI & VARIASI UKURAN */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold flex items-center space-x-1.5">
+                        <span>◻</span>
+                        <span>Kotak Pembingkai Scratch</span>
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Garis bingkai pembatas persegi panjang</div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={showScratchBoxes} 
+                      onChange={(e) => setShowScratchBoxes(e.target.checked)} 
+                      className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer" 
+                    />
+                  </div>
+
+                  {/* Variasi Ukuran */}
+                  <div>
+                    <div className={`text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Variasi Ukuran Kotak:</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { id: 'editorial', label: 'Editorial Hero', desc: 'Hero block & slim slit' },
+                        { id: 'varied', label: 'Dynamic Mix', desc: 'Campuran besar & kecil' },
+                        { id: 'bento', label: 'Bento Grid', desc: 'Kuadran asimetris' },
+                        { id: 'balanced', label: 'Balanced', desc: 'Proporsional reguler' }
+                      ].map(v => (
+                        <button
+                          key={v.id}
+                          onClick={() => setBoxSizeVariety(v.id)}
+                          className={`p-2 text-left rounded-lg border transition-all ${boxSizeVariety === v.id ? (isDarkMode ? 'bg-[#1a1a1a] border-emerald-400 text-emerald-400' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold') : (isDarkMode ? 'bg-[#181818] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                        >
+                          <div className="text-[10px] font-bold">{v.label}</div>
+                          <div className="text-[8px] opacity-70">{v.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {showScratchBoxes && (
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      <div>
+                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Tebal Garis:</div>
+                        <div className="flex space-x-1">
+                          {[1, 2, 3].map(w => (
+                            <button
+                              key={w}
+                              onClick={() => setBoxBorderWidth(w)}
+                              className={`flex-1 py-1 text-[10px] font-mono font-bold rounded ${boxBorderWidth === w ? (isDarkMode ? 'bg-emerald-400 text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                            >
+                              {w}px
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Warna Garis:</div>
+                        <div className="flex space-x-1">
+                          {[
+                            { id: 'auto', label: 'Auto' },
+                            { id: '#000000', label: 'Dark' },
+                            { id: '#ffffff', label: 'Light' }
+                          ].map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => setBoxBorderColor(c.id)}
+                              className={`flex-1 py-1 text-[10px] font-mono rounded ${boxBorderColor === c.id ? (isDarkMode ? 'bg-emerald-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. TIPOGRAFI KOLOM KOTAK */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold flex items-center space-x-1.5">
+                        <span>Aa</span>
+                        <span>Tipografi Kolom Kotak</span>
+                      </div>
+                      <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Kata tebal kapital + indeks angka di sudut kotak</div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={showBoxTypography} 
+                      onChange={(e) => setShowBoxTypography(e.target.checked)} 
+                      className="w-4.5 h-4.5 accent-cyan-400 cursor-pointer" 
+                    />
+                  </div>
+
+                  {showBoxTypography && (
+                    <div className="space-y-3 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      {/* Font Family Selector */}
+                      <div>
+                        <div className={`text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Pilihan Font Family:</div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { id: 'sans', label: 'Modern Sans', preview: 'Inter / Swiss' },
+                            { id: 'mono', label: 'Tech Mono', preview: 'Monospace' },
+                            { id: 'serif', label: 'Editorial Serif', preview: 'Playfair' },
+                            { id: 'grotesk', label: 'Heavy Grotesk', preview: 'Impact' },
+                            { id: 'condensed', label: 'Condensed', preview: 'Narrow' }
+                          ].map(f => (
+                            <button
+                              key={f.id}
+                              onClick={() => setBoxFontFamily(f.id)}
+                              className={`p-2 text-left rounded-lg border transition-all ${boxFontFamily === f.id ? (isDarkMode ? 'bg-[#1a1a1a] border-cyan-400 text-cyan-400' : 'bg-cyan-50 border-cyan-600 text-cyan-900 font-bold') : (isDarkMode ? 'bg-[#181818] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                            >
+                              <div className="text-[10px] font-bold">{f.label}</div>
+                              <div className="text-[8px] opacity-70">{f.preview}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Number Format & Font Size */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Format Angka:</div>
+                          <div className="flex space-x-1">
+                            {[
+                              { id: 'plus', label: '1, 3+' },
+                              { id: 'standard', label: '1, 2' },
+                              { id: 'pad', label: '01' }
+                            ].map(fmt => (
+                              <button
+                                key={fmt.id}
+                                onClick={() => setBoxNumberFormat(fmt.id)}
+                                className={`flex-1 py-1 text-[10px] font-mono rounded ${boxNumberFormat === fmt.id ? (isDarkMode ? 'bg-cyan-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                              >
+                                {fmt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <span>Ukuran Teks</span>
+                            <span className="font-mono text-cyan-400">{boxFontSize}%</span>
+                          </div>
+                          <input 
+                            type="range" min="60" max="160" value={boxFontSize} 
+                            onChange={(e) => setBoxFontSize(Number(e.target.value))} 
+                            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
+                          />
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* Section 4: Auto Annotation with Gemini AI */}
-          <div className="space-y-3">
-             <button onClick={() => toggleAccordion('ai')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-                 <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Auto Annotation</h2>
-                 <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.ai ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-             </button>
-             {accordions.ai && (
-               <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                 <div className="flex items-center justify-end mb-2">
-                     <div className={`flex p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-100 border-gray-100'}`}>
-                         {['EN', 'JP', 'ID'].map(lang => (
-                             <button key={lang} onClick={() => setAnnoLang(lang)} className={`text-[10px] font-bold px-2 py-1 rounded transition-colors cursor-pointer ${annoLang === lang ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#333]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888] hover:text-[#ccc]' : 'text-gray-400 hover:text-gray-600')}`}>{lang}</button>
-                         ))}
-                     </div>
-                 </div>
-                 <div>
-                     <input type="password" placeholder="Gemini Token (API Key)" value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className={`w-full text-xs p-2.5 border rounded-md focus:outline-none ${isDarkMode ? 'bg-[#111] border-[#333] text-white focus:border-[#10B981]' : 'bg-white border-gray-300 text-gray-900 focus:border-blue-500'}`} />
-                     <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className={`text-[10px] mt-1.5 inline-block font-medium hover:underline ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-600'}`}>Get Gemini API Token here</a>
-                 </div>
-                 <div className="flex items-center gap-3 pt-1">
-                     <div className={`flex-1 border rounded-lg p-2.5 flex justify-between items-center shadow-sm ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-50 border-gray-200'}`}>
-                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Auto Analysis</span>
-                         <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${isDarkMode ? 'bg-[#222] text-[#10B981] border-[#10B981]/30' : 'bg-gray-800 text-white border-transparent'}`}>GEMINI 2.5</span>
-                     </div>
-                     <button onClick={handleAiAnalysis} disabled={isAiAnalyzing || !image} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm flex items-center justify-center cursor-pointer ${isAiAnalyzing || !image ? (isDarkMode ? 'bg-[#222] text-[#555] border border-[#333] cursor-not-allowed' : 'bg-gray-400 text-white cursor-not-allowed') : (isDarkMode ? 'bg-[#10B981] text-black hover:bg-[#059669] active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-gray-900 text-white hover:bg-black active:scale-95')}`}>
-                         {isAiAnalyzing ? 'Scanning...' : 'Scan AI'}
-                     </button>
-                 </div>
-                 <p className={`text-[11px] font-medium mt-1 ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Kata terdaftar: <span className={`font-bold ${isDarkMode ? 'text-[#00FFFF]' : 'text-blue-500'}`}>{aiWords.length} kata</span> ({annoLang}).</p>
-               </div>
-             )}
-          </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
-
-          {/* Section 5: Slit-Scan Options */}
-          <div className="space-y-4">
-            <button onClick={() => toggleAccordion('slit')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-              <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Slit-Scan Options</h2>
-              <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.slit ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-            </button>
-            {accordions.slit && (
-              <div className="space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Cut Complexity</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{complexity}%</span></div>
-                    <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Density (Empty Gaps)</span><span className={`${isDarkMode ? 'text-[#10B981] font-mono' : ''}`}>{density}%</span></div>
-                    <input type="range" min="10" max="100" value={density} onChange={(e) => setDensity(Number(e.target.value))} className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-[#10B981] ${isDarkMode ? 'bg-[#222]' : 'bg-gray-200'}`} disabled={isManualMode} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Stretch Intensity (Overshoot)</span><span className={`font-bold ${isDarkMode ? 'text-[#00FFFF] font-mono' : 'text-blue-500'}`}>{stretchInt}%</span></div>
-                    <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-[#00FFFF] ${isDarkMode ? 'bg-[#222]' : 'bg-blue-200'}`} />
-                </div>
-                <div>
-                    <div className={`flex justify-between text-xs font-semibold mb-2 ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}><span>Brutal Distortion</span><span className={`font-bold ${isDarkMode ? 'text-red-500 font-mono' : 'text-red-500'}`}>{brutalInt}%</span></div>
-                    <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className={`w-full h-1.5 rounded-lg cursor-pointer accent-red-500 ${isDarkMode ? 'bg-[#222]' : 'bg-red-200'}`} />
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Stretch Direction</span>
-                    <div className={`flex items-center space-x-1 text-[11px] font-mono font-bold p-1 rounded-md border ${isDarkMode ? 'bg-[#111] border-[#333]' : 'bg-gray-100 border-gray-200'}`}>
-                        <button className={`px-3 py-1.5 rounded cursor-pointer ${stretchDirX ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirX(!stretchDirX)}>H</button>
-                        <button className={`px-3 py-1.5 rounded cursor-pointer ${stretchDirY ? (isDarkMode ? 'bg-[#222] text-[#00FFFF] shadow-sm border border-[#444]' : 'bg-white shadow-sm text-black') : (isDarkMode ? 'text-[#888]' : 'text-gray-400')}`} onClick={() => setStretchDirY(!stretchDirY)}>V</button>
+            {/* ================= TAB 2: SLIT-SCAN FX ================= */}
+            {activeTab === 'slit' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className={`p-3.5 rounded-xl border space-y-4 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <span>Cut Complexity (Kerapatan Garis)</span>
+                      <span className="text-emerald-400 font-mono text-[11px]">{complexity}%</span>
                     </div>
+                    <input type="range" min="10" max="100" value={complexity} onChange={(e) => setComplexity(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                  </div>
+
+                  <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <span>Stretch Intensity (Panjang Streak)</span>
+                      <span className="text-cyan-400 font-mono text-[11px]">{stretchInt}%</span>
+                    </div>
+                    <input type="range" min="0" max="150" value={stretchInt} onChange={(e) => setStretchInt(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
+                  </div>
+
+                  <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <span>Brutal Distortion</span>
+                      <span className="text-red-400 font-mono text-[11px]">{brutalInt}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value={brutalInt} onChange={(e) => setBrutalInt(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-red-500" />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+                    <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Arah Stretch</span>
+                    <div className="flex space-x-1">
+                      <button 
+                        onClick={() => setStretchDirX(!stretchDirX)}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${stretchDirX ? 'bg-cyan-500 text-black' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
+                      >
+                        Horizontal
+                      </button>
+                      <button 
+                        onClick={() => setStretchDirY(!stretchDirY)}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${stretchDirY ? 'bg-cyan-500 text-black' : (isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500')}`}
+                      >
+                        Vertical
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Render Style */}
+                <div className={`p-3.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-800'}`}>Render Style & Filter:</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'classic', label: 'Classic', desc: 'Bersih & Tajam' },
+                      { id: 'glitch', label: 'Glitch RGB', desc: 'Chromatic Aberration' },
+                      { id: 'liquid', label: 'Liquid Wave', desc: 'Gelombang Organik' },
+                      { id: 'zine', label: 'Zine Print', desc: 'Grain & High Contrast' }
+                    ].map(style => (
+                      <button
+                        key={style.id}
+                        onClick={() => setRenderStyle(style.id)}
+                        className={`p-2.5 text-left rounded-lg border transition-all ${renderStyle === style.id ? (isDarkMode ? 'bg-[#1e1e1e] border-emerald-400 text-emerald-400 shadow-md' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold') : (isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                      >
+                        <div className="text-xs font-bold">{style.label}</div>
+                        <div className="text-[9px] opacity-70">{style.desc}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* ================= TAB 3: KUAS MANUAL ================= */}
+            {activeTab === 'brush' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className={`p-3.5 rounded-xl border space-y-3.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className={`flex p-1 rounded-lg border ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-gray-100 border-gray-200'}`}>
+                    <button onClick={() => { setIsManualMode(false); setActiveTool('pan'); handleRandomize(); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${!isManualMode ? (isDarkMode ? 'bg-[#262626] text-emerald-400 shadow' : 'bg-white shadow text-black') : 'text-gray-500'}`}>Auto (Random)</button>
+                    <button onClick={() => { setIsManualMode(true); setActiveTool('brush'); }} className={`flex-1 text-xs py-2 font-semibold rounded-md transition-all ${isManualMode ? (isDarkMode ? 'bg-[#262626] text-emerald-400 shadow' : 'bg-white shadow text-black') : 'text-gray-500'}`}>Manual (Brush)</button>
+                  </div>
+
+                  {isManualMode ? (
+                    <div className="space-y-3.5 pt-1">
+                      <div>
+                        <div className={`text-[11px] font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Pilih Target yang Ingin Dilukis:</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button 
+                            onClick={() => setBrushTarget('card')}
+                            className={`p-2.5 text-center rounded-lg border transition-all font-bold text-xs flex flex-col items-center space-y-1 ${brushTarget === 'card' ? 'bg-amber-400 text-black border-amber-500 shadow-md ring-2 ring-amber-400/40' : (isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                          >
+                            <span className="text-base">🗂️</span>
+                            <span>Lukis Kartu Cutout</span>
+                          </button>
+                          <button 
+                            onClick={() => setBrushTarget('stretch')}
+                            className={`p-2.5 text-center rounded-lg border transition-all font-bold text-xs flex flex-col items-center space-y-1 ${brushTarget === 'stretch' ? 'bg-cyan-400 text-black border-cyan-500 shadow-md ring-2 ring-cyan-400/40' : (isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                          >
+                            <span className="text-base">🌊</span>
+                            <span>Lukis Stretch</span>
+                          </button>
+                        </div>
+                        <p className={`text-[10px] mt-2 leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {brushTarget === 'card' 
+                            ? 'Sapukan kursor kuas ke atas kanvas untuk menaruh kartu solid berlabel di koordinat yang Anda inginkan.' 
+                            : 'Sapukan kursor kuas ke atas gambar untuk membatasi efek slit-scan stretch hanya pada area yang disapu.'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <span>Ukuran Kuas (Brush Radius)</span>
+                          <span className="font-mono text-emerald-400">{brushSize}px</span>
+                        </div>
+                        <input type="range" min="15" max="150" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400" />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-2">
+                        <button onClick={clearCardMask} className={`text-[10px] py-2 rounded-lg font-bold transition border ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-amber-400 hover:bg-[#252525]' : 'bg-white border-gray-200 text-amber-800 hover:bg-gray-50'}`}>Hapus Mask Kartu</button>
+                        <button onClick={clearStretchMask} className={`text-[10px] py-2 rounded-lg font-bold transition border ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-cyan-400 hover:bg-[#252525]' : 'bg-white border-gray-200 text-blue-800 hover:bg-gray-50'}`}>Hapus Mask Stretch</button>
+                      </div>
+                      <button onClick={clearAllMasks} className={`w-full text-[10px] py-2 rounded-lg font-bold transition border ${isDarkMode ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'}`}>
+                        Hapus Semua Goresan Kuas
+                      </button>
+                    </div>
+                  ) : (
+                    <p className={`text-[11px] p-2 rounded-lg leading-relaxed ${isDarkMode ? 'bg-[#1c1c1c] text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
+                      Di mode <strong>Auto</strong>, generator secara cerdas menyebarkan kartu dan distorsi secara otomatis. Klik <strong>Manual (Brush)</strong> jika Anda ingin mengontrol posisi kartu secara bebas dengan kuas.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ================= TAB 4: GEMINI AI ================= */}
+            {activeTab === 'ai' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className={`p-3.5 rounded-xl border space-y-3.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-800'}`}>Bahasa Kata Kunci:</span>
+                    <div className="flex space-x-1">
+                      {['EN', 'JP', 'ID'].map(lang => (
+                        <button 
+                          key={lang} 
+                          onClick={() => setAnnoLang(lang)} 
+                          className={`px-2 py-0.5 text-xs font-bold rounded ${annoLang === lang ? 'bg-cyan-500 text-black' : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-600')}`}
+                        >
+                          {lang}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <input 
+                      type="password" 
+                      placeholder="Masukkan Gemini API Token (AI Studio)" 
+                      value={apiKeyInput} 
+                      onChange={(e) => setApiKeyInput(e.target.value)} 
+                      className={`w-full text-xs p-2.5 border rounded-lg focus:outline-none ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-white focus:border-emerald-500' : 'bg-white border-gray-300 text-gray-900'}`} 
+                    />
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[10px] mt-1 inline-block text-cyan-400 hover:underline">
+                      Dapatkan Token Gemini API gratis di sini →
+                    </a>
+                  </div>
+
+                  <button 
+                    onClick={handleAiAnalysis} 
+                    disabled={isAiAnalyzing || !image} 
+                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition shadow flex items-center justify-center space-x-2 ${isAiAnalyzing || !image ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-300' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black active:scale-95'}`}
+                  >
+                    <span>✨</span>
+                    <span>{isAiAnalyzing ? 'Sedang Menganalisis Gambar...' : 'Pindai Kata Kunci AI (Gemini 3.6)'}</span>
+                  </button>
+                </div>
+
+                {/* Interactive Tag Cloud Kata Kunci */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-800'}`}>Kata Kunci Aktif ({aiWords.length}):</span>
+                    <button onClick={() => setAiWords(fallbackWords[annoLang])} className="text-[10px] text-gray-400 hover:text-white underline">Reset Default</button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {aiWords.map((word, idx) => (
+                      <span 
+                        key={idx} 
+                        className={`inline-flex items-center space-x-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${isDarkMode ? 'bg-[#1a1a1a] border-[#2e2e2e] text-cyan-300' : 'bg-gray-100 border-gray-200 text-cyan-900'}`}
+                      >
+                        <span>{word}</span>
+                        <button onClick={() => removeKeyword(word)} className="text-gray-500 hover:text-red-400 ml-1">×</button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Tambah Kata Kunci Kustom */}
+                  <form onSubmit={addCustomKeyword} className="flex space-x-1.5 pt-1">
+                    <input 
+                      type="text" 
+                      placeholder="Tambah kata kustom..." 
+                      value={newKeywordInput} 
+                      onChange={(e) => setNewKeywordInput(e.target.value)} 
+                      className={`flex-1 text-xs px-2.5 py-1.5 border rounded-lg focus:outline-none ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-white' : 'bg-white border-gray-300 text-gray-900'}`} 
+                    />
+                    <button type="submit" className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 text-black hover:bg-emerald-400 cursor-pointer">
+                      +
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ================= TAB 5: KANVAS & FORMAT ================= */}
+            {activeTab === 'canvas' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className={`p-3.5 rounded-xl border space-y-3.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div>
+                    <div className={`text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Ukuran & Format Kanvas:</div>
+                    <select 
+                      value={canvasFormat} 
+                      onChange={(e) => setCanvasFormat(e.target.value)}
+                      className={`w-full text-xs p-2.5 border rounded-lg focus:outline-none cursor-pointer ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-white focus:border-emerald-500' : 'bg-white border-gray-300 text-gray-900'}`}
+                    >
+                      <option value="original">Original Aspect Ratio</option>
+                      <option value="square">Square 1:1 (1080 × 1080) - IG Feed</option>
+                      <option value="portrait">Portrait 4:5 (1080 × 1350) - Post</option>
+                      <option value="story">Story 9:16 (1080 × 1920) - Reels/TikTok</option>
+                      <option value="landscape">Landscape 16:9 (1920 × 1080) - Screen</option>
+                      <option value="a4">A4 Zine Poster (1240 × 1754)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className={`flex justify-between text-xs font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <span>Image Bleed / Scale</span>
+                      <span className="font-mono text-cyan-400">{scale}%</span>
+                    </div>
+                    <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400" />
+                  </div>
+
+                  <div className="flex space-x-2 pt-1">
+                    <button onClick={handleRotate} className={`flex-1 text-xs py-2 font-bold rounded-lg border transition-all ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-300 hover:bg-[#242424]' : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'}`}>
+                      ↻ Putar 90°
+                    </button>
+                    <button onClick={() => fileInputRef.current.click()} className={`flex-1 text-xs py-2 font-bold rounded-lg border transition-all ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-emerald-400 hover:bg-[#242424]' : 'bg-white border-gray-200 text-emerald-700 hover:bg-gray-50'}`}>
+                      Ganti Gambar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Legacy Visual Overlays */}
+                <div className={`p-3.5 rounded-xl border space-y-2.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className={`text-xs font-bold ${isDarkMode ? 'text-gray-300' : 'text-gray-800'}`}>Overlay Grafis Tambahan:</div>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Garis Kisi Acak (Random Lines)</span>
+                    <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Teks Mengambang (Floating Anno)</span>
+                    <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className="w-4 h-4 accent-cyan-500" />
+                  </label>
+                </div>
+              </div>
+            )}
+
           </div>
-          <hr className={`border-t ${isDarkMode ? 'border-[#222]' : 'border-gray-200'}`} />
 
-          {/* Section 6: Visuals & Annotations */}
-          <div className="space-y-4">
-             <button onClick={() => toggleAccordion('visuals')} className="w-full flex items-center justify-between focus:outline-none mb-2">
-               <h2 className={`text-xs font-bold uppercase tracking-wider font-mono ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`}>Visuals & Annotations</h2>
-               <svg className={`w-4 h-4 transition-transform duration-300 ${accordions.visuals ? 'rotate-180' : ''} ${isDarkMode ? 'text-[#555]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-             </button>
-             {accordions.visuals && (
-               <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                 <label className="flex items-center justify-between cursor-pointer">
-                     <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Grid Lines & Blocks</span>
-                     <input type="checkbox" checked={showGridLines} onChange={(e) => setShowGridLines(e.target.checked)} className={`w-4.5 h-4.5 cursor-pointer ${isDarkMode ? 'accent-[#10B981]' : 'accent-blue-600'}`} />
-                 </label>
-                 <div className="space-y-3">
-                     <label className="flex items-center justify-between cursor-pointer">
-                         <span className={`text-sm font-semibold ${isDarkMode ? 'text-[#ccc]' : 'text-gray-700'}`}>Show Annotation Text</span>
-                         <input type="checkbox" checked={showTextAnnotations} onChange={(e) => setShowTextAnnotations(e.target.checked)} className={`w-4.5 h-4.5 cursor-pointer ${isDarkMode ? 'accent-[#00FFFF]' : 'accent-blue-600'}`} />
-                     </label>
-                     {showTextAnnotations && (
-                         <div className={`flex items-center justify-between pl-3 border-l-2 ml-1 ${isDarkMode ? 'border-[#333]' : 'border-gray-200'}`}>
-                             <span className={`text-xs font-medium ${isDarkMode ? 'text-[#888]' : 'text-gray-500'}`}>Text Color</span>
-                             <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="w-7 h-7 p-0 border-0 rounded cursor-pointer bg-transparent" />
-                         </div>
-                     )}
-                 </div>
-               </div>
-             )}
-          </div>
-        </div>
+          <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />
+        </aside>
 
-        {/* Export Buttons */}
-        <div className={`p-6 border-t transition-colors duration-200 ${isDarkMode ? 'bg-[#111] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
-           <div className="flex space-x-3">
-              <button onClick={() => handleExport('png')} className={`flex-1 py-3 rounded-lg font-bold text-sm transition active:scale-95 cursor-pointer ${isDarkMode ? 'bg-[#00FFFF] text-black hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,255,255,0.3)]' : 'bg-black text-white hover:bg-gray-800'}`}>Export PNG</button>
-              <button onClick={() => handleExport('jpg')} className={`flex-1 border py-3 rounded-lg font-bold text-sm transition active:scale-95 cursor-pointer ${isDarkMode ? 'border-[#333] bg-[#222] text-[#ccc] hover:bg-[#333]' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>Export JPG</button>
-           </div>
-        </div>
-      </div>
-
-      {/* --- PANEL KANAN (WORKSPACE) --- */}
-      <div 
-        className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#050505]' : 'bg-[#E5E7EB]'}`}
-        onPointerEnter={() => setIsHoveringWorkspace(true)}
-        onPointerLeave={(e) => {
-            setIsHoveringWorkspace(false);
-            handleWorkspacePointerUp(e);
-        }}
-        onPointerMove={handleWorkspacePointerMove}
-        onPointerDown={handleWorkspacePointerDown}
-        onPointerUp={handleWorkspacePointerUp}
-      >
-         
-         {/* Top Left Corner */}
-         <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-50 transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}></div>
-
-         {/* Horizontal Ruler */}
-         <div 
-            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}
+        {/* --- WORKSPACE KANVAS (KANAN) --- */}
+        <main 
+          className={`flex-1 relative overflow-hidden touch-none transition-colors duration-200 ${isDarkMode ? 'bg-[#080808]' : 'bg-[#E5E7EB]'}`}
+          onPointerEnter={() => setIsHoveringWorkspace(true)}
+          onPointerLeave={(e) => {
+              setIsHoveringWorkspace(false);
+              handleWorkspacePointerUp(e);
+          }}
+          onPointerMove={handleWorkspacePointerMove}
+          onPointerDown={handleWorkspacePointerDown}
+          onPointerUp={handleWorkspacePointerUp}
+        >
+          
+          {/* Rulers Penggaris */}
+          <div className={`absolute top-0 left-0 w-[24px] h-[24px] border-b border-r z-30 transition-colors ${isDarkMode ? 'bg-[#121212] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}></div>
+          <div 
+            className={`absolute top-0 left-[24px] right-0 h-[24px] border-b z-20 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#121212] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'h')}
-            title="Tarik ke bawah untuk membuat Garis Panduan Horizontal"
-         >
+            title="Tarik dari penggaris untuk membuat Garis Panduan Horizontal"
+          >
             <Ruler type="h" pan={pan} zoom={viewScale} length={viewportSize.w} isDarkMode={isDarkMode} />
-         </div>
-
-         {/* Vertical Ruler */}
-         <div 
-            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-40 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#0a0a0a] border-[#222]' : 'bg-[#222] border-[#333]'}`}
+          </div>
+          <div 
+            className={`absolute top-[24px] left-0 bottom-0 w-[24px] border-r z-20 overflow-hidden transition-colors ${isDarkMode ? 'bg-[#121212] border-[#222]' : 'bg-[#1F2937] border-[#374151]'}`}
             onPointerDown={(e) => startGuideFromRuler(e, 'v')}
-            title="Tarik ke kanan untuk membuat Garis Panduan Vertikal"
-         >
-             <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
-         </div>
+            title="Tarik dari penggaris untuk membuat Garis Panduan Vertikal"
+          >
+            <Ruler type="v" pan={pan} zoom={viewScale} length={viewportSize.h} isDarkMode={isDarkMode} />
+          </div>
 
-         {/* Canvas Viewport */}
-         <div 
+          {/* Viewport & Canvas Container */}
+          <div 
             className="absolute top-[24px] left-[24px] right-0 bottom-0 overflow-hidden"
             ref={viewportRef}
             onWheel={(e) => {
@@ -1020,78 +1786,187 @@ export default function App() {
                 if (e.deltaY < 0) setViewScale(v => Math.min(v + 0.1, 5));
                 else setViewScale(v => Math.max(v - 0.1, 0.1));
             }}
-         >
-            <div 
-               style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${viewScale})`, transformOrigin: 'center' }}
-               className={`w-full h-full flex items-center justify-center transition-transform duration-75
-                           ${currentTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (currentTool === 'brush' && isManualMode ? 'cursor-none' : 'cursor-crosshair')}`}
-            >
-               <canvas ref={canvasRef} className={`shadow-[0_0_50px_rgba(0,0,0,0.8)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
-            </div>
+          >
+            {/* JIKA GAMBAR BELUM DIUNGGAH (COLD-START HERO DROPZONE) */}
+            {!image ? (
+              <div className="w-full h-full flex items-center justify-center p-6 animate-in fade-in duration-200">
+                <div className={`max-w-md w-full border-2 border-dashed rounded-3xl p-8 text-center transition-all ${isDraggingOver ? 'border-emerald-500 scale-102 bg-emerald-500/10' : (isDarkMode ? 'border-[#282828] bg-[#111]' : 'border-gray-300 bg-white shadow-xl')}`}>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 mx-auto flex items-center justify-center text-3xl shadow-xl shadow-emerald-500/20 mb-4">
+                    🖼️
+                  </div>
+                  <h2 className="text-xl font-black tracking-tight mb-2">Tarik & Lepas Gambar ke Sini</h2>
+                  <p className={`text-xs leading-relaxed mb-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Unggah foto untuk menerapkan efek generative slit-scan, bingkai grid terstruktur, kartu cutout, dan tipografi modern secara instan.
+                  </p>
 
-            {/* Guides */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 justify-center mb-6">
+                    <button 
+                      onClick={() => fileInputRef.current.click()}
+                      className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-lg shadow-emerald-500/25 active:scale-95 transition-all cursor-pointer"
+                    >
+                      Pilih File dari Laptop
+                    </button>
+                    <button 
+                      onClick={loadAestheticSample}
+                      className={`px-5 py-3 rounded-xl font-bold text-xs border active:scale-95 transition-all cursor-pointer ${isDarkMode ? 'bg-[#1c1c1c] border-[#333] text-gray-200 hover:bg-[#252525]' : 'bg-gray-50 border-gray-200 text-gray-800 hover:bg-gray-100'}`}
+                    >
+                      ✨ Coba Gambar Sampel
+                    </button>
+                  </div>
+
+                  <div className={`flex items-center justify-center space-x-3 text-[10px] font-mono ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <span>PNG / JPG / WEBP</span>
+                    <span>•</span>
+                    <span>Multi-Format</span>
+                    <span>•</span>
+                    <span>Resolusi Tinggi</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div 
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${viewScale})`, transformOrigin: 'center' }}
+                className={`w-full h-full flex items-center justify-center transition-transform duration-75
+                            ${currentTool === 'pan' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : (currentTool === 'brush' && isManualMode ? 'cursor-none' : 'cursor-crosshair')}`}
+              >
+                <canvas ref={canvasRef} className={`shadow-[0_0_60px_rgba(0,0,0,0.6)] object-contain ${isDarkMode ? 'bg-[#050505]' : 'bg-white'}`} />
+              </div>
+            )}
+
+            {/* Draggable Guides */}
             {guides.map(g => (
                <div 
                   key={g.id}
                   style={{ [g.type === 'h' ? 'top' : 'left']: (g.type === 'h' ? viewportSize.h/2 + pan.y + g.pos * viewScale : viewportSize.w/2 + pan.x + g.pos * viewScale) + 'px' }}
-                  className={`absolute z-30 flex items-center justify-center
+                  className={`absolute z-20 flex items-center justify-center
                              ${g.type === 'h' ? 'left-0 right-0 h-[7px] -mt-[3px] cursor-ns-resize' : 'top-0 bottom-0 w-[7px] -ml-[3px] cursor-ew-resize'}`}
                   onPointerDown={(e) => { e.stopPropagation(); setDraggingGuide({id: g.id, type: g.type}); }}
                >
-                  <div className={`bg-[#00FFFF] shadow-[0_0_2px_#00FFFF] ${g.type === 'h' ? 'w-full h-[1px]' : 'h-full w-[1px]'}`}></div>
+                  <div className={`bg-[#00FFFF] shadow-[0_0_3px_#00FFFF] ${g.type === 'h' ? 'w-full h-[1px]' : 'h-full w-[1px]'}`}></div>
                </div>
             ))}
-         </div>
+          </div>
 
-         {/* VISUAL BRUSH FEEDBACK (Indikator Lingkaran Kuas) */}
-         {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
+          {/* Feedback Visual Kursor Brush di Kanvas */}
+          {isHoveringWorkspace && currentTool === 'brush' && isManualMode && (
             <div
-                className="fixed rounded-full pointer-events-none z-[9999]"
+                className="fixed rounded-full pointer-events-none z-[9999] flex items-center justify-center"
                 style={{
                     left: mousePos.x,
                     top: mousePos.y,
                     width: brushSize,
                     height: brushSize,
                     transform: 'translate(-50%, -50%)',
-                    border: '2px solid #00FFFF', 
-                    backgroundColor: 'rgba(0, 255, 255, 0.18)',
-                    boxShadow: '0 0 10px rgba(0, 255, 255, 0.4)'
+                    border: brushTarget === 'card' ? '2px solid #FACC15' : '2px solid #00FFFF', 
+                    backgroundColor: brushTarget === 'card' ? 'rgba(250, 204, 21, 0.2)' : 'rgba(0, 255, 255, 0.15)'
                 }}
-            />
-         )}
-
-         {/* Floating Toolbar */}
-         <div className={`absolute top-[44px] left-[44px] backdrop-blur-md border rounded-md shadow-2xl flex flex-col z-50 overflow-hidden ${isDarkMode ? 'bg-[#0a0a0a]/90 border-[#222]' : 'bg-[#2D2D2D]/95 border-[#444]'}`}>
-            <button 
-                className={`p-3 transition flex items-center justify-center cursor-pointer ${activeTool==='pan' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
-                onClick={() => setActiveTool('pan')} title="Hand Tool (Pan Canvas) - Shortcut: Spacebar / V"
             >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
-            </button>
-            <button 
-                className={`p-3 transition flex items-center justify-center cursor-pointer ${activeTool==='brush' ? (isDarkMode ? 'bg-[#10B981] text-black shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-blue-600 text-white') : (isDarkMode ? 'text-[#888] hover:text-white hover:bg-[#222]' : 'text-gray-400 hover:text-white hover:bg-[#444]')}`}
-                onClick={() => { setActiveTool('brush'); setIsManualMode(true); showToast('Kuas Aktif (Mode Manual)'); }} title="Brush Tool (Paint Effect Area) - Shortcut: B"
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
-            </button>
-            <div className={`h-[1px] w-full ${isDarkMode ? 'bg-[#222]' : 'bg-[#444]'}`}></div>
-            <button 
-                className="p-3 transition flex items-center justify-center text-red-500 hover:bg-red-500/20 hover:text-red-400 cursor-pointer"
-                onClick={() => { setGuides([]); showToast('Garis panduan dibersihkan'); }} title="Clear All Guides"
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-            </button>
-         </div>
+               <span className="text-[9px] font-bold px-1 rounded shadow" style={{ backgroundColor: brushTarget === 'card' ? '#FACC15' : '#00FFFF', color: '#000000' }}>
+                 {brushTarget === 'card' ? 'CARD' : 'STRETCH'}
+               </span>
+            </div>
+          )}
 
-         {/* Bottom Right Zoom Controls */}
-         <div className={`absolute bottom-6 right-6 backdrop-blur-md text-xs rounded shadow-2xl flex items-center border overflow-hidden z-50 ${isDarkMode ? 'bg-[#0a0a0a]/90 text-[#ccc] border-[#222]' : 'bg-[#2D2D2D]/95 text-gray-300 border-[#444]'}`}>
-            <button className={`px-4 py-3 transition font-bold cursor-pointer ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-[#444]'}`} onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
-            <span className={`px-3 font-mono border-x min-w-[65px] text-center ${isDarkMode ? 'border-[#222] text-[#00FFFF]' : 'border-[#444]'}`}>{Math.round(viewScale * 100)}%</span>
-            <button className={`px-4 py-3 transition font-bold cursor-pointer ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-[#444]'}`} onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
-            <button className={`px-4 py-3 transition font-semibold cursor-pointer ${isDarkMode ? 'hover:bg-[#222] text-[#10B981]' : 'hover:bg-[#444] text-blue-400'}`} onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Reset</button>
-         </div>
+          {/* --- FLOATING CANVAS DOCK (CANVA / FIGMA STYLE BOTTOM CENTER) --- */}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40">
+            <div className={`backdrop-blur-xl border rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1.5 transition-colors ${isDarkMode ? 'bg-[#121212]/90 border-[#282828] text-gray-300' : 'bg-white/95 border-gray-200 text-gray-700'}`}>
+              
+              {/* Tool: Pan */}
+              <button 
+                className={`p-2 rounded-xl transition flex items-center justify-center ${activeTool === 'pan' ? (isDarkMode ? 'bg-emerald-500 text-black shadow' : 'bg-black text-white shadow') : (isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100')}`}
+                onClick={() => setActiveTool('pan')} 
+                title="Hand Tool (Pan Kanvas) [Shortcut: Spasi / H]"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="9 19 12 22 15 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+              </button>
 
+              {/* Tool: Brush */}
+              <button 
+                className={`p-2 rounded-xl transition flex items-center justify-center ${activeTool === 'brush' && isManualMode ? (brushTarget === 'card' ? 'bg-amber-400 text-black shadow' : 'bg-cyan-400 text-black shadow') : (isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100')}`}
+                onClick={() => { setActiveTool('brush'); setIsManualMode(true); setActiveTab('brush'); }} 
+                title="Brush Tool (Lukis Kartu / Stretch) [Shortcut: B]"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.35 2.22 1.45 3.02 1.45 2.67 0 4.81-2.16 4.81-4.83 0-1.66-1.34-3.02-3.01-3.02z"/></svg>
+              </button>
+
+              <div className={`h-5 w-[1px] ${isDarkMode ? 'bg-[#2a2a2a]' : 'bg-gray-200'}`}></div>
+
+              {/* Zoom Controls */}
+              <button className={`px-2.5 py-1.5 rounded-lg transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100'}`} onClick={() => setViewScale(v => Math.max(0.1, v - 0.1))}>—</button>
+              <span className={`px-1.5 font-mono text-[11px] font-bold min-w-[50px] text-center ${isDarkMode ? 'text-cyan-400' : 'text-gray-900'}`}>{Math.round(viewScale * 100)}%</span>
+              <button className={`px-2.5 py-1.5 rounded-lg transition font-bold ${isDarkMode ? 'hover:bg-[#222]' : 'hover:bg-gray-100'}`} onClick={() => setViewScale(v => Math.min(5, v + 0.1))}>+</button>
+              <button className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${isDarkMode ? 'hover:bg-[#222] text-emerald-400' : 'hover:bg-gray-100 text-emerald-700'}`} onClick={() => { setViewScale(1); setPan({x:0, y:0}); }}>Fit</button>
+
+              <div className={`h-5 w-[1px] ${isDarkMode ? 'bg-[#2a2a2a]' : 'bg-gray-200'}`}></div>
+
+              {/* Clear Guides */}
+              <button 
+                className="p-2 rounded-xl transition text-red-500 hover:bg-red-500/10"
+                onClick={() => { setGuides([]); showToast('Garis panduan dibersihkan'); }}
+                title="Hapus Semua Garis Panduan"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+
+              {/* Shortcuts Help */}
+              <button 
+                className={`p-2 rounded-xl transition font-mono font-bold text-xs ${isDarkMode ? 'hover:bg-[#222] text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}
+                onClick={() => setShowShortcutsModal(true)}
+                title="Pintasan Keyboard [?]"
+              >
+                ?
+              </button>
+
+            </div>
+          </div>
+
+        </main>
       </div>
+
+      {/* --- TOAST NOTIFICATION BANNER --- */}
+      {toastMessage && (
+        <div className="fixed top-16 right-5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="bg-emerald-500 text-black font-bold text-xs px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2">
+            <span>✓</span>
+            <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* --- KEYBOARD SHORTCUTS MODAL --- */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className={`max-w-sm w-full rounded-2xl border p-5 shadow-2xl ${isDarkMode ? 'bg-[#161616] border-[#2e2e2e] text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-sm">Pintasan Keyboard</h3>
+              <button onClick={() => setShowShortcutsModal(false)} className="text-gray-400 hover:text-white text-lg">×</button>
+            </div>
+            <div className="space-y-2 text-xs">
+              {[
+                { key: 'Spasi + Geser', desc: 'Geser Kanvas (Pan)' },
+                { key: 'Scroll Roda', desc: 'Perbesar / Perkecil (Zoom)' },
+                { key: 'B', desc: 'Pilih Alat Kuas (Brush)' },
+                { key: 'H', desc: 'Pilih Alat Tangan (Pan)' },
+                { key: 'R', desc: 'Acak Pola Slit-Scan (Randomize)' },
+                { key: '1, 2, 3, 4', desc: 'Ganti Preset Cepat' },
+                { key: '?', desc: 'Buka / Tutup Bantuan' }
+              ].map((s, idx) => (
+                <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-500/10">
+                  <span className={`font-mono font-bold px-2 py-0.5 rounded ${isDarkMode ? 'bg-[#222] text-cyan-400' : 'bg-gray-100 text-cyan-800'}`}>{s.key}</span>
+                  <span className="opacity-80">{s.desc}</span>
+                </div>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowShortcutsModal(false)} 
+              className="mt-5 w-full py-2 rounded-xl bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400"
+            >
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
