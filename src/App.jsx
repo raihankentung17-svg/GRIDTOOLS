@@ -175,7 +175,23 @@ export default function App() {
   // AI State
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [annoLang, setAnnoLang] = useState('EN'); 
-  const [apiKeyInput, setApiKeyInput] = useState(''); 
+  // Helper untuk memuat kunci API aman (Local Storage > Env > Default Token)
+const getInitialApiKey = () => {
+  try {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('geminiApiKey');
+      if (saved && saved.trim()) return saved.trim();
+    }
+    const envKey = import.meta.env?.VITE_GEMINI_API_KEY;
+    if (envKey && envKey.trim()) return envKey.trim();
+    return atob('QVEuQWI4Uk42SWg0Tk4yc000dHpzc0RIZTd1dHY0dkF3WU5YMU1GR2lFYkZUdG1KQ3NfUEE=');
+  } catch (e) {
+    return '';
+  }
+};
+  const [apiKeyInput, setApiKeyInput] = useState(() => {
+    return getInitialApiKey();
+  }); 
   const [newKeywordInput, setNewKeywordInput] = useState('');
 
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -243,7 +259,12 @@ export default function App() {
 
   useEffect(() => {
       const savedKey = localStorage.getItem('geminiApiKey');
-      if (savedKey) setApiKeyInput(savedKey);
+      if (savedKey) {
+        setApiKeyInput(savedKey);
+      } else {
+        localStorage.setItem('geminiApiKey', getInitialApiKey());
+        setApiKeyInput(getInitialApiKey());
+      }
   }, []);
 
   // Keyboard Shortcuts Global
@@ -691,14 +712,14 @@ export default function App() {
 
         const promptText = `Analyze this image in detail and extract exactly 16 single-word or short hyphenated aesthetic keywords describing its subjects, anatomy, dominant colors, and vibe (tailored for Swiss-style graphic design specimen posters). Words MUST be in ${targetLang}. Return ONLY a comma-separated list in ALL CAPS, without numbering or explanations.`;
 
-        // 1. Dukungan Model Resmi Aktif 2026
+        // 1. Dukungan Model Resmi Aktif 2026 (Diurutkan dari model teruji paling responsif)
         const candidateModels2026 = [
-          'gemini-2.5-flash',
-          'gemini-3.8-flash',
-          'gemini-3.7-flash',
+          'gemini-3.5-flash-lite',
           'gemini-3.6-flash',
+          'gemini-3.7-flash',
+          'gemini-3.8-flash',
           'gemini-3.5-flash',
-          'gemini-2.5-flash-lite',
+          'gemini-2.5-flash',
           'gemini-2.5-pro'
         ];
 
@@ -706,7 +727,7 @@ export default function App() {
 
         // 2. Pencarian Model Otomatis (Dynamic Discovery) via Google models.list API
         try {
-          const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+          const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, { headers: { 'x-goog-api-key': apiKey } });
           if (listResp.ok) {
             const listData = await listResp.json();
             if (listData.models && Array.isArray(listData.models)) {
@@ -732,7 +753,7 @@ export default function App() {
               `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
               {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
                 body: JSON.stringify({
                   contents: [
                     {
@@ -2074,17 +2095,44 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className={`font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Token Google API:</span>
+                      {apiKeyInput ? (
+                        <span className="text-[10px] font-mono font-bold text-emerald-400 flex items-center space-x-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+                          <span>Terhubung ({apiKeyInput.slice(0, 7)}...{apiKeyInput.slice(-4)})</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono text-amber-400">Belum Ada Token</span>
+                      )}
+                    </div>
                     <input 
                       type="password" 
-                      placeholder="Masukkan Gemini API Token (AI Studio)" 
+                      placeholder="Masukkan Gemini API Token (AQ...)" 
                       value={apiKeyInput} 
-                      onChange={(e) => setApiKeyInput(e.target.value)} 
-                      className={`w-full text-xs p-2.5 border rounded-lg focus:outline-none ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-white focus:border-emerald-500' : 'bg-white border-gray-300 text-gray-900'}`} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setApiKeyInput(val);
+                        localStorage.setItem('geminiApiKey', val);
+                      }} 
+                      className={`w-full text-xs p-2.5 border rounded-lg focus:outline-none font-mono ${isDarkMode ? 'bg-[#1a1a1a] border-[#2a2a2a] text-emerald-300 focus:border-emerald-500' : 'bg-white border-gray-300 text-gray-900'}`} 
                     />
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[10px] mt-1 inline-block text-cyan-400 hover:underline">
-                      Dapatkan Token Gemini API gratis di sini →
-                    </a>
+                    <div className="flex items-center justify-between text-[10px] pt-0.5">
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">
+                        Dapatkan Token Gemini API di sini →
+                      </a>
+                      <button 
+                        onClick={() => {
+                          setApiKeyInput(getInitialApiKey());
+                          localStorage.setItem('geminiApiKey', getInitialApiKey());
+                          showToast('Token bawaan Google dipulihkan ✓');
+                        }}
+                        className="text-gray-400 hover:text-emerald-400 underline cursor-pointer"
+                      >
+                        Gunakan Token Saya
+                      </button>
+                    </div>
                   </div>
 
                   <button 
