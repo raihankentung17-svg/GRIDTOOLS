@@ -148,6 +148,13 @@ export default function App() {
   const [boxBorderColor, setBoxBorderColor] = useState('auto'); // 'auto', '#000000', '#ffffff', '#10B981', '#00FFFF'
   const [boxSizeVariety, setBoxSizeVariety] = useState('editorial'); // 'balanced', 'varied', 'editorial', 'bento'
 
+  // Pola Klaster Spesimen Anatomi (Sesuai 4 Gambar Referensi)
+  const [clusterLayout, setClusterLayout] = useState('full'); // 'full', 'stepped_diagonal', 'anatomical_cross', 'columnar_t', 'horizontal_spine'
+  const [showIntactBoxBorders, setShowIntactBoxBorders] = useState(false); // Beri garis & label pada kotak normal utuh
+  const [showDirectionArrows, setShowDirectionArrows] = useState(true); // Tampilkan panah ↓ / → pada angka sesuai arah slit
+  const [outerFramingCards, setOuterFramingCards] = useState(true); // Kartu putih pembingkai spesimen di perimeter klaster
+  const [heroBreakout, setHeroBreakout] = useState(true); // Bebaskan kepala/wajah subjek agar utuh menembus grid
+
   // Kartu Cutout Solid
   const [showCutoutCards, setShowCutoutCards] = useState(true);
   const [cutoutCardColor, setCutoutCardColor] = useState('#FFFFFF');
@@ -157,7 +164,7 @@ export default function App() {
   // Tipografi Kolom Kotak
   const [showBoxTypography, setShowBoxTypography] = useState(true);
   const [boxFontFamily, setBoxFontFamily] = useState('sans'); // 'sans', 'mono', 'serif', 'grotesk', 'condensed'
-  const [boxNumberFormat, setBoxNumberFormat] = useState('plus'); // 'plus', 'standard', 'pad'
+  const [boxNumberFormat, setBoxNumberFormat] = useState('arrows'); // 'arrows', 'plus', 'standard', 'pad'
   const [boxFontSize, setBoxFontSize] = useState(100);
   
   // Visual Overlays & Legacy
@@ -179,11 +186,28 @@ export default function App() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isHoveringWorkspace, setIsHoveringWorkspace] = useState(false);
 
-  // Kosakata Desain Kontemporer
+  // Kosakata Desain Kontemporer & Taksonomi Spesimen Ilmiah (Swiss Archive)
   const fallbackWords = {
-    'ID': ['RETRO', 'DIGITAL', 'GRID', 'STRUKTUR', 'ESTETIKA', 'MODERN', 'VIBE', 'STUDIO', 'FUTUR', 'KREATIF', 'VISUAL', 'FOKUS'],
-    'EN': ['RETRO', 'DIGITAL', 'GRID', 'STRUCTURE', 'AESTHETIC', 'MODERN', 'VIBE', 'STAY', 'WEIRD', 'CRINGE', 'SWAG', 'FUTURE', 'STUDIO', 'SYSTEM', 'TYPO', 'MOTION'],
-    'JP': ['レトロ', 'デジタル', 'グリッド', '構造', '美学', 'モダン', '未来', 'スタジオ', 'システム', 'タイポ', 'モーション', 'デザイン']
+    'ID': [
+      'GOLDFISH', 'STRUKTUR', 'ANATOMI', 'WARNA-CERAH', 'FOKUS-TAJAM', 'SIRIP-TRANSPARAN', 
+      'SISIK-HALUS', 'BENTUK-ORGANIK', 'FOTOGRAFI-MAKRO', 'LATAR-BERSIH', 'ISOLASI', 
+      'MINIMALIS', 'PROFIL', 'TEKSTUR', 'KERANGKA', 'SIMETRI', 'BIOLOGIS', 'METAMORFOSIS', 'KONTRAST'
+    ],
+    'EN': [
+      'ANATOMY', 'MACRO-PHOTOGRAPHY', 'VIBRANT-ORANGE', 'TRANSLUCENT-FINS', 'DELICATE-SCALES', 
+      'SHARP-FOCUS', 'AQUATIC-LIFE', 'FLOWING-TAIL', 'SURPRISED-EXPRESSION', 'ORGANIC-SHAPES', 
+      'QUIRKY-CHARACTER', 'STUDIO-SHOOT', 'MINIMALIST', 'ISOLATED', 'PURE-WHITE-BACKGROUND', 
+      'FLAMINGO', 'CORAL', 'GRACEFUL', 'EXOTIC', 'AVIAN-FORM', 'TROPICAL', 'S-CURVE', 
+      'PLUMAGE', 'PROFILE', 'LONG-LEGGED', 'SALMON', 'BEAK', 'TEXTURE', 'ELEGANT', 'WILDLIFE', 
+      'FISH', 'SKELETON', 'BONE', 'SPINE', 'RIBS', 'SKULL', 'FRAGILE', 'INTRICATE', 'STRUCTURAL', 
+      'SCIENTIFIC', 'MARINE', 'REMAINS', 'BIOLOGICAL', 'SYMMETRY', 'STARK', 'CATERPILLAR', 
+      'SWALLOWTAIL', 'LARVA', 'STRIPED', 'SPOTTED', 'DORSAL', 'LATERAL', 'LEPIDOPTERA', 
+      'YELLOW', 'METAMORPHOSIS', 'CONTRAST', 'VIVID', 'VENTRAL', 'SEGMENTED'
+    ],
+    'JP': [
+      '解剖学', '構造', 'マクロ写真', '標本', '骨格', '幾何学', 'ミニマリズム', 
+      '対称性', '生物学', '輪郭', '透明感', 'ディテール', 'レトロ', 'デジタル', '美学', 'モダン'
+    ]
   };
   const [aiWords, setAiWords] = useState(fallbackWords['EN']);
 
@@ -238,12 +262,20 @@ export default function App() {
               handleRandomize();
               showToast('Seed Diacak 🔀');
           } else if (e.key === '1') {
-              applyPreset('editorial');
+              applyPreset('cat_diagonal');
           } else if (e.key === '2') {
-              applyPreset('cyber');
+              applyPreset('goldfish_axial');
           } else if (e.key === '3') {
-              applyPreset('zine');
+              applyPreset('flamingo_column');
           } else if (e.key === '4') {
+              applyPreset('fish_skeleton');
+          } else if (e.key === '5') {
+              applyPreset('editorial');
+          } else if (e.key === '6') {
+              applyPreset('cyber');
+          } else if (e.key === '7') {
+              applyPreset('zine');
+          } else if (e.key === '8') {
               applyPreset('minimal');
           } else if (e.key === '?') {
               setShowShortcutsModal(prev => !prev);
@@ -342,7 +374,106 @@ export default function App() {
 
   // --- PRESET SYSTEM (1-Klik Tampilan Siap Pakai) ---
   const applyPreset = (presetName) => {
-    if (presetName === 'editorial') {
+    if (presetName === 'cat_diagonal') {
+      setClusterLayout('stepped_diagonal');
+      setShowScratchBoxes(true);
+      setShowIntactBoxBorders(true);
+      setShowBoxTypography(true);
+      setShowDirectionArrows(true);
+      setOuterFramingCards(true);
+      setHeroBreakout(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#000000');
+      setBoxSizeVariety('bento');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('arrows');
+      setRenderStyle('classic');
+      setStretchBalance(55);
+      setStretchInt(75);
+      setComplexity(50);
+      setIsDarkMode(false);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+      showToast('Preset: 🐱 Stepped Diagonal (Cat) diterapkan');
+    } else if (presetName === 'goldfish_axial') {
+      setClusterLayout('anatomical_cross');
+      setShowScratchBoxes(true);
+      setShowIntactBoxBorders(true);
+      setShowBoxTypography(true);
+      setShowDirectionArrows(true);
+      setOuterFramingCards(true);
+      setHeroBreakout(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#000000');
+      setBoxSizeVariety('editorial');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('arrows');
+      setRenderStyle('classic');
+      setStretchBalance(70);
+      setStretchInt(80);
+      setComplexity(55);
+      setIsDarkMode(false);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+      showToast('Preset: 🐠 Axial Cross (Goldfish) diterapkan');
+    } else if (presetName === 'flamingo_column') {
+      setClusterLayout('columnar_t');
+      setShowScratchBoxes(true);
+      setShowIntactBoxBorders(true);
+      setShowBoxTypography(true);
+      setShowDirectionArrows(true);
+      setOuterFramingCards(true);
+      setHeroBreakout(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#000000');
+      setBoxSizeVariety('editorial');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('arrows');
+      setRenderStyle('classic');
+      setStretchBalance(35);
+      setStretchInt(75);
+      setComplexity(45);
+      setIsDarkMode(false);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+      showToast('Preset: 🦩 Columnar T-Frame (Flamingo) diterapkan');
+    } else if (presetName === 'fish_skeleton') {
+      setClusterLayout('horizontal_spine');
+      setShowScratchBoxes(true);
+      setShowIntactBoxBorders(true);
+      setShowBoxTypography(true);
+      setShowDirectionArrows(true);
+      setOuterFramingCards(true);
+      setHeroBreakout(true);
+      setShowCutoutCards(true);
+      setCutoutCardColor('#FFFFFF');
+      setCutoutCardOpacity(100);
+      setBoxBorderWidth(1);
+      setBoxBorderColor('#000000');
+      setBoxSizeVariety('bento');
+      setBoxFontFamily('sans');
+      setBoxNumberFormat('arrows');
+      setRenderStyle('classic');
+      setStretchBalance(50);
+      setStretchInt(70);
+      setComplexity(58);
+      setIsDarkMode(false);
+      setShowGridLines(false);
+      setShowTextAnnotations(false);
+      showToast('Preset: 🦴 Anatomy Spine (Fish) diterapkan');
+    } else if (presetName === 'editorial') {
+      setClusterLayout('full');
+      setShowIntactBoxBorders(false);
+      setShowDirectionArrows(false);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
       setShowCutoutCards(true);
@@ -361,6 +492,9 @@ export default function App() {
       setShowTextAnnotations(false);
       showToast('Preset: 📰 Editorial Grid diterapkan');
     } else if (presetName === 'cyber') {
+      setClusterLayout('full');
+      setShowIntactBoxBorders(false);
+      setShowDirectionArrows(false);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
       setShowCutoutCards(false);
@@ -374,6 +508,9 @@ export default function App() {
       setTextColor('#00FFFF');
       showToast('Preset: ⚡ Cyber Slit diterapkan');
     } else if (presetName === 'zine') {
+      setClusterLayout('full');
+      setShowIntactBoxBorders(false);
+      setShowDirectionArrows(false);
       setShowScratchBoxes(true);
       setShowBoxTypography(true);
       setShowCutoutCards(true);
@@ -388,6 +525,9 @@ export default function App() {
       setBrutalInt(45);
       showToast('Preset: 📄 Brutal Zine diterapkan');
     } else if (presetName === 'minimal') {
+      setClusterLayout('full');
+      setShowIntactBoxBorders(false);
+      setShowDirectionArrows(false);
       setShowScratchBoxes(false);
       setShowBoxTypography(false);
       setShowCutoutCards(false);
@@ -799,14 +939,109 @@ export default function App() {
             const dstW = w + 1; const dstH = h + 1;
             const cellCenterNX = (x + w / 2) / canvas.width;
             const cellCenterNY = (y + h / 2) / canvas.height;
+            const relCX = ((x + w / 2) - bX) / bW;
+            const relCY = ((y + h / 2) - bY) / bH;
+
+            let inCluster = true;
+            let isHeroZone = false;
+            let isPerimeterCard = false;
+            let cardArrow = '';
+
+            if (clusterLayout === 'stepped_diagonal') {
+                // Diagonal staircase (Gaya Kucing)
+                const diagCenter = 0.22 + 0.65 * relCX;
+                const dist = relCY - diagCenter;
+
+                if (heroBreakout && relCX < 0.42 && relCY < 0.35) {
+                    isHeroZone = true;
+                    inCluster = true;
+                } else if (heroBreakout && relCX > 0.62 && relCY < 0.52) {
+                    inCluster = false;
+                } else if (dist >= -0.25 && dist <= 0.32) {
+                    inCluster = true;
+                    if (outerFramingCards && (dist >= 0.10 || (relCX < 0.28 && relCY >= 0.32 && relCY <= 0.60))) {
+                        isPerimeterCard = true;
+                        cardArrow = relCY > 0.55 ? '↓' : '→';
+                    }
+                } else {
+                    inCluster = false;
+                }
+            } else if (clusterLayout === 'anatomical_cross') {
+                // Silang Aksial (Gaya Ikan Mas)
+                const inHoriz = relCY >= 0.22 && relCY <= 0.78;
+                const inVert = relCX >= 0.20 && relCX <= 0.68;
+
+                if (inHoriz || inVert) {
+                    inCluster = true;
+                    if (heroBreakout && relCX >= 0.46 && relCX <= 0.82 && relCY >= 0.42 && relCY <= 0.72) {
+                        isHeroZone = true;
+                    } else if (outerFramingCards) {
+                        if (relCX < 0.28 || (relCY < 0.32 && relCX < 0.45) || (relCY > 0.72 && relCX > 0.52)) {
+                            isPerimeterCard = true;
+                            cardArrow = relCY > 0.5 ? '↓' : '→';
+                        }
+                    }
+                } else {
+                    inCluster = false;
+                }
+            } else if (clusterLayout === 'columnar_t') {
+                // Tiang Vertikal T (Gaya Flamingo)
+                const inBody = relCY >= 0.24 && relCY <= 0.50 && relCX >= 0.12 && relCX <= 0.82;
+                const inLegs = relCX >= 0.36 && relCX <= 0.62 && relCY >= 0.24 && relCY <= 0.95;
+                const inNeck = relCX >= 0.54 && relCX <= 0.78 && relCY >= 0.12 && relCY <= 0.38;
+
+                if (inBody || inLegs || inNeck) {
+                    inCluster = true;
+                    if (heroBreakout && relCX >= 0.66 && relCY <= 0.28) {
+                        isHeroZone = true;
+                    } else if (outerFramingCards) {
+                        if (relCX < 0.28 && relCY >= 0.24 && relCY <= 0.65) {
+                            isPerimeterCard = true;
+                            cardArrow = '→';
+                        } else if (relCX > 0.54 && relCY >= 0.68) {
+                            isPerimeterCard = true;
+                            cardArrow = '↓';
+                        } else if (relCX < 0.42 && relCY < 0.28) {
+                            isPerimeterCard = true;
+                            cardArrow = '→';
+                        }
+                    }
+                } else {
+                    inCluster = false;
+                }
+            } else if (clusterLayout === 'horizontal_spine') {
+                // Tulang Spine (Gaya Tulang Ikan)
+                const inSpine = relCY >= 0.32 && relCY <= 0.64 && relCX >= 0.05 && relCX <= 0.95;
+                const inDorsal = relCY >= 0.12 && relCY <= 0.42 && relCX >= 0.25 && relCX <= 0.78;
+                const inVentral = relCY >= 0.56 && relCY <= 0.88 && relCX >= 0.25 && relCX <= 0.78;
+
+                if (inSpine || inDorsal || inVentral) {
+                    inCluster = true;
+                    if (heroBreakout && (relCX <= 0.24 || relCX >= 0.80)) {
+                        isHeroZone = true;
+                    } else if (outerFramingCards) {
+                        if ((relCX < 0.20 && relCY > 0.50) || (relCX > 0.75 && relCY > 0.55)) {
+                            isPerimeterCard = true;
+                            cardArrow = '→';
+                        }
+                    }
+                } else {
+                    inCluster = false;
+                }
+            }
+
+            if (!inCluster) {
+                normalPass.push({ type: 'breakout', x, y, w, h, dstW, dstH, inCluster: false });
+                continue;
+            }
 
             let applyStretch = false;
-            let applyCard = false;
+            let applyCard = isPerimeterCard;
 
             if (isManualMode) {
                 applyCard = checkMask(cellCenterNX, cellCenterNY, cardMaskPointsRef.current);
                 applyStretch = checkMask(cellCenterNX, cellCenterNY, stretchMaskPointsRef.current);
-            } else {
+            } else if (!isPerimeterCard && !isHeroZone) {
                 const r = rng();
                 if (showCutoutCards && r < pCardCutout && w >= 28 * relScale && h >= 20 * relScale) {
                     applyCard = true;
@@ -816,7 +1051,7 @@ export default function App() {
             }
 
             if (applyCard) {
-                cutoutCardPass.push({ x, y, w, h, dstW, dstH });
+                cutoutCardPass.push({ type: 'card', x, y, w, h, dstW, dstH, cardArrow: cardArrow || (rng() > 0.6 ? (rng() > 0.5 ? '→' : '↓') : ''), inCluster: true });
             } else if (applyStretch) {
                 let isHoriz = rng() < (stretchBalance / 100);
                 if (!stretchDirX && stretchDirY) isHoriz = false;
@@ -842,9 +1077,13 @@ export default function App() {
                 if(srcX < x) srcX = x;
                 if(srcY < y) srcY = y;
 
-                stretchPass.push({ isHoriz, srcX, srcY, sliceW, sliceH, x, y, w, h, dstW, dstH });
+                stretchPass.push({ 
+                    type: isHoriz ? 'slit_h' : 'slit_v',
+                    isHoriz, srcX, srcY, sliceW, sliceH, 
+                    x, y, w, h, dstW, dstH, inCluster: true 
+                });
             } else {
-                normalPass.push({ type: 'normal', x, y, w, h, dstW, dstH });
+                normalPass.push({ type: isHeroZone ? 'hero' : 'intact', x, y, w, h, dstW, dstH, inCluster: true });
             }
         }
     }
@@ -928,6 +1167,7 @@ export default function App() {
         cutoutCardPass.forEach(card => {
             ctx.fillRect(card.x, card.y, card.w, card.h);
         });
+
         ctx.restore();
     }
 
@@ -958,7 +1198,11 @@ export default function App() {
         const strokeW = Math.max(1, Math.floor(boxBorderWidth * relScale));
         ctx.lineWidth = strokeW;
 
-        const boxesToStroke = [...stretchPass, ...cutoutCardPass];
+        let boxesToStroke = [...stretchPass, ...cutoutCardPass];
+        if (showIntactBoxBorders) {
+            const intactInCluster = normalPass.filter(op => op.inCluster && (op.type === 'intact' || op.type === 'hero'));
+            boxesToStroke = [...boxesToStroke, ...intactInCluster];
+        }
 
         boxesToStroke.forEach(box => {
             if (boxBorderColor === 'auto') {
@@ -988,13 +1232,20 @@ export default function App() {
         const labeledBoxes = [];
         cutoutCardPass.forEach(card => labeledBoxes.push({ ...card, isCard: true }));
         stretchPass.forEach(box => {
-            if (box.w >= 32 * relScale && box.h >= 22 * relScale) {
+            if (box.w >= 26 * relScale && box.h >= 16 * relScale) {
                 labeledBoxes.push({ ...box, isCard: false });
             }
         });
+        if (showIntactBoxBorders) {
+            normalPass.forEach(box => {
+                if (box.inCluster && (box.type === 'intact' || box.type === 'hero') && box.w >= 26 * relScale && box.h >= 16 * relScale) {
+                    labeledBoxes.push({ ...box, isCard: false, isIntact: true });
+                }
+            });
+        }
 
         labeledBoxes.sort((a, b) => {
-            if (Math.abs(a.y - b.y) > 40 * relScale) return a.y - b.y;
+            if (Math.abs(a.y - b.y) > 30 * relScale) return a.y - b.y;
             return a.x - b.x;
         });
 
@@ -1010,13 +1261,23 @@ export default function App() {
         labeledBoxes.forEach((box, idx) => {
             const word = aiWords[idx % aiWords.length] || 'GRID';
             
+            let arrowChar = '';
+            if (showDirectionArrows || boxNumberFormat === 'arrows') {
+                if (box.type === 'slit_v' || box.isHoriz === false) arrowChar = '↓';
+                else if (box.type === 'slit_h' || box.isHoriz === true) arrowChar = '→';
+                else if (box.cardArrow) arrowChar = box.cardArrow;
+                else if (box.isCard && (idx % 3 === 0)) arrowChar = (idx % 2 === 0 ? '→' : '↓');
+            }
+
             let numDisplay;
-            if (boxNumberFormat === 'plus') {
+            if (boxNumberFormat === 'arrows') {
+                numDisplay = `${indexCounter}${arrowChar}`;
+            } else if (boxNumberFormat === 'plus') {
                 numDisplay = indexCounter === 1 ? '1' : `${indexCounter}+`;
             } else if (boxNumberFormat === 'pad') {
                 numDisplay = String(indexCounter).padStart(2, '0');
             } else {
-                numDisplay = `${indexCounter}`;
+                numDisplay = `${indexCounter}${arrowChar}`;
             }
 
             let textFill;
@@ -1108,7 +1369,8 @@ export default function App() {
     showScratchBoxes, showBoxTypography, showCutoutCards, boxBorderWidth, boxBorderColor, boxSizeVariety,
     cutoutCardColor, cutoutCardOpacity, cutoutCardDensity, boxFontFamily, boxNumberFormat, boxFontSize,
     showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat,
-    gridBoundsMode, imageOffsetX, imageOffsetY, stretchBalance
+    gridBoundsMode, imageOffsetX, imageOffsetY, stretchBalance,
+    clusterLayout, showIntactBoxBorders, showDirectionArrows, outerFramingCards, heroBreakout
   ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
@@ -1149,22 +1411,47 @@ export default function App() {
         </div>
 
         {/* Quick Presets Bar (Tengah) */}
-        <div className="hidden lg:flex items-center space-x-1.5 p-1 rounded-lg border bg-opacity-50" style={{ backgroundColor: isDarkMode ? '#161616' : '#f3f4f6', borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
-          {[
-            { id: 'editorial', label: '📰 Editorial', shortcut: '1' },
-            { id: 'cyber', label: '⚡ Cyber', shortcut: '2' },
-            { id: 'zine', label: '📄 Zine', shortcut: '3' },
-            { id: 'minimal', label: '🎛️ Raw Slit', shortcut: '4' }
-          ].map(p => (
-            <button
-              key={p.id}
-              onClick={() => applyPreset(p.id)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1.5 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
-            >
-              <span>{p.label}</span>
-              <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#262626] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
-            </button>
-          ))}
+        <div className="hidden lg:flex items-center space-x-1.5 p-1 rounded-xl border bg-opacity-60 backdrop-blur-sm" style={{ backgroundColor: isDarkMode ? '#141414' : '#f3f4f6', borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+          {/* Kelompok Swiss Specimen */}
+          <div className="flex items-center space-x-1 pr-1.5 border-r" style={{ borderColor: isDarkMode ? '#262626' : '#e0e0e0' }}>
+            <span className={`text-[9.5px] font-extrabold uppercase tracking-wider px-1 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>🔬 Specimen:</span>
+            {[
+              { id: 'cat_diagonal', label: '🐱 Cat', shortcut: '1' },
+              { id: 'goldfish_axial', label: '🐠 Fish', shortcut: '2' },
+              { id: 'flamingo_column', label: '🦩 Flamingo', shortcut: '3' },
+              { id: 'fish_skeleton', label: '🦴 Spine', shortcut: '4' }
+            ].map(p => (
+              <button
+                key={p.id}
+                onClick={() => applyPreset(p.id)}
+                className={`px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
+                title={`Preset Spesimen Anatomi: ${p.label} (Tombol ${p.shortcut})`}
+              >
+                <span>{p.label}</span>
+                <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Kelompok Klasik */}
+          <div className="flex items-center space-x-1 pl-0.5">
+            {[
+              { id: 'editorial', label: '📰 Edit', shortcut: '5' },
+              { id: 'cyber', label: '⚡ Cyber', shortcut: '6' },
+              { id: 'zine', label: '📄 Zine', shortcut: '7' },
+              { id: 'minimal', label: '🎛️ Raw', shortcut: '8' }
+            ].map(p => (
+              <button
+                key={p.id}
+                onClick={() => applyPreset(p.id)}
+                className={`px-2 py-1 text-xs font-semibold rounded-md transition-all flex items-center space-x-1 ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-[#222]' : 'text-gray-700 hover:text-black hover:bg-white hover:shadow-sm'}`}
+                title={`Preset Klasik: ${p.label} (Tombol ${p.shortcut})`}
+              >
+                <span>{p.label}</span>
+                <span className={`text-[9px] font-mono px-1 rounded ${isDarkMode ? 'bg-[#222] text-gray-500' : 'bg-gray-200 text-gray-500'}`}>{p.shortcut}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Action Controls Kanan */}
@@ -1266,6 +1553,52 @@ export default function App() {
             {activeTab === 'boxes' && (
               <div className="space-y-4 animate-in fade-in duration-150">
                 
+                {/* 0. POLA KLASTER SPESIMEN ANATOMI (SWISS BIO-ARCHIVE) */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div>
+                    <div className="text-xs font-bold flex items-center space-x-1.5">
+                      <span>🔬</span>
+                      <span>Pola Klaster Anatomi (Swiss Specimen)</span>
+                    </div>
+                    <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Bentuk susunan grid mengikuti kontur gestur & anatomi subjek
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'full', label: '📐 Full Grid', desc: 'Standar persegi penuh' },
+                      { id: 'stepped_diagonal', label: '🐱 Tangga Diagonal', desc: 'Gaya Kucing Melompat' },
+                      { id: 'anatomical_cross', label: '🐠 Silang Aksial', desc: 'Gaya Ikan Mas' },
+                      { id: 'columnar_t', label: '🦩 Tiang Vertikal', desc: 'Gaya Flamingo T-Frame' },
+                      { id: 'horizontal_spine', label: '🦴 Spine Tulang', desc: 'Gaya Tulang Ikan' }
+                    ].map(layout => (
+                      <button
+                        key={layout.id}
+                        onClick={() => setClusterLayout(layout.id)}
+                        className={`p-2 text-left rounded-lg border transition-all ${clusterLayout === layout.id ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-400 text-emerald-400 font-bold ring-1 ring-emerald-400/40 shadow-sm' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold shadow-sm') : (isDarkMode ? 'bg-[#181818] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')}`}
+                      >
+                        <div className="text-[10px] font-bold">{layout.label}</div>
+                        <div className="text-[8px] opacity-70">{layout.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Kontrol Spesimen Lanjutan */}
+                  {clusterLayout !== 'full' && (
+                    <div className="space-y-2 pt-2 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      <label className="flex items-center justify-between cursor-pointer">
+                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Bebaskan Kepala/Wajah (Hero Breakout)</span>
+                        <input type="checkbox" checked={heroBreakout} onChange={(e) => setHeroBreakout(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                      </label>
+                      <label className="flex items-center justify-between cursor-pointer">
+                        <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Kartu Putih Pembingkai Luar (Perimeter)</span>
+                        <input type="checkbox" checked={outerFramingCards} onChange={(e) => setOuterFramingCards(e.target.checked)} className="w-4 h-4 accent-amber-500" />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
                 {/* 1. KARTU CUTOUT SOLID */}
                 <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
                   <div className="flex items-center justify-between">
@@ -1392,40 +1725,51 @@ export default function App() {
                   </div>
 
                   {showScratchBoxes && (
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
-                      <div>
-                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Tebal Garis:</div>
-                        <div className="flex space-x-1">
-                          {[1, 2, 3].map(w => (
-                            <button
-                              key={w}
-                              onClick={() => setBoxBorderWidth(w)}
-                              className={`flex-1 py-1 text-[10px] font-mono font-bold rounded ${boxBorderWidth === w ? (isDarkMode ? 'bg-emerald-400 text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
-                            >
-                              {w}px
-                            </button>
-                          ))}
+                    <div className="space-y-2.5 pt-1 border-t border-dashed" style={{ borderColor: isDarkMode ? '#262626' : '#e5e7eb' }}>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Tebal Garis:</div>
+                          <div className="flex space-x-1">
+                            {[1, 2, 3].map(w => (
+                              <button
+                                key={w}
+                                onClick={() => setBoxBorderWidth(w)}
+                                className={`flex-1 py-1 text-[10px] font-mono font-bold rounded ${boxBorderWidth === w ? (isDarkMode ? 'bg-emerald-400 text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                              >
+                                {w}px
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Warna Garis:</div>
+                          <div className="flex space-x-1">
+                            {[
+                              { id: 'auto', label: 'Auto' },
+                              { id: '#000000', label: 'Dark' },
+                              { id: '#ffffff', label: 'Light' }
+                            ].map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => setBoxBorderColor(c.id)}
+                                className={`flex-1 py-1 text-[10px] font-mono rounded ${boxBorderColor === c.id ? (isDarkMode ? 'bg-emerald-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                              >
+                                {c.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
-                      <div>
-                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Warna Garis:</div>
-                        <div className="flex space-x-1">
-                          {[
-                            { id: 'auto', label: 'Auto' },
-                            { id: '#000000', label: 'Dark' },
-                            { id: '#ffffff', label: 'Light' }
-                          ].map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => setBoxBorderColor(c.id)}
-                              className={`flex-1 py-1 text-[10px] font-mono rounded ${boxBorderColor === c.id ? (isDarkMode ? 'bg-emerald-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
-                            >
-                              {c.label}
-                            </button>
-                          ))}
+                      {/* Toggle Bingkai pada Sel Normal */}
+                      <label className="flex items-center justify-between cursor-pointer pt-1 border-t" style={{ borderColor: isDarkMode ? '#222' : '#f0f0f0' }}>
+                        <div>
+                          <div className={`text-[10px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Bingkai Sel Utuh (Normal Image)</div>
+                          <div className={`text-[8.5px] ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Beri bingkai pada foto asli di dalam klaster (Gaya Anatomi)</div>
                         </div>
-                      </div>
+                        <input type="checkbox" checked={showIntactBoxBorders} onChange={(e) => setShowIntactBoxBorders(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                      </label>
                     </div>
                   )}
                 </div>
@@ -1477,8 +1821,9 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Format Angka:</div>
-                          <div className="flex space-x-1">
+                          <div className="grid grid-cols-2 gap-1">
                             {[
+                              { id: 'arrows', label: '1, 2↓, 3→' },
                               { id: 'plus', label: '1, 3+' },
                               { id: 'standard', label: '1, 2' },
                               { id: 'pad', label: '01' }
@@ -1486,7 +1831,7 @@ export default function App() {
                               <button
                                 key={fmt.id}
                                 onClick={() => setBoxNumberFormat(fmt.id)}
-                                className={`flex-1 py-1 text-[10px] font-mono rounded ${boxNumberFormat === fmt.id ? (isDarkMode ? 'bg-cyan-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
+                                className={`py-1 text-[9px] font-mono rounded text-center ${boxNumberFormat === fmt.id ? (isDarkMode ? 'bg-cyan-400 text-black font-bold' : 'bg-black text-white font-bold') : (isDarkMode ? 'bg-[#222] text-gray-400' : 'bg-gray-200 text-gray-700')}`}
                               >
                                 {fmt.label}
                               </button>
@@ -1504,6 +1849,12 @@ export default function App() {
                             onChange={(e) => setBoxFontSize(Number(e.target.value))} 
                             className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                           />
+                          
+                          {/* Toggle Panah Arah Slit */}
+                          <label className="flex items-center justify-between cursor-pointer mt-2 pt-1 border-t" style={{ borderColor: isDarkMode ? '#222' : '#f0f0f0' }}>
+                            <span className={`text-[9.5px] font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Panah Arah Slit (↓ / →)</span>
+                            <input type="checkbox" checked={showDirectionArrows} onChange={(e) => setShowDirectionArrows(e.target.checked)} className="w-3.5 h-3.5 accent-cyan-400" />
+                          </label>
                         </div>
                       </div>
 
@@ -2099,7 +2450,8 @@ export default function App() {
                 { key: 'B', desc: 'Pilih Alat Kuas (Brush)' },
                 { key: 'H', desc: 'Pilih Alat Tangan (Pan)' },
                 { key: 'R', desc: 'Acak Pola Slit-Scan (Randomize)' },
-                { key: '1, 2, 3, 4', desc: 'Ganti Preset Cepat' },
+                { key: '1 - 4', desc: 'Preset Spesimen (Cat, Fish, Flamingo, Spine)' },
+                { key: '5 - 8', desc: 'Preset Klasik (Editorial, Cyber, Zine, Raw)' },
                 { key: '?', desc: 'Buka / Tutup Bantuan' }
               ].map((s, idx) => (
                 <div key={idx} className="flex justify-between items-center py-1 border-b border-gray-500/10">
