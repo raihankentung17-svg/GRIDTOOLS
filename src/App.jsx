@@ -135,6 +135,12 @@ export default function App() {
   const [brutalInt, setBrutalInt] = useState(25); 
   const [stretchDirX, setStretchDirX] = useState(true);
   const [stretchDirY, setStretchDirY] = useState(true);
+  const [stretchBalance, setStretchBalance] = useState(75); // 0 (100% V) s/d 100 (100% H), default 75
+
+  // Mode Batas Grid & Posisi Gambar (Sinkronisasi Gerak & Batas)
+  const [gridBoundsMode, setGridBoundsMode] = useState('image'); // 'image' (terkunci rapat ke gambar) | 'canvas' (penuh kanvas)
+  const [imageOffsetX, setImageOffsetX] = useState(0);
+  const [imageOffsetY, setImageOffsetY] = useState(0);
 
   // Kotak Pembingkai Scratch & Variasi Ukuran
   const [showScratchBoxes, setShowScratchBoxes] = useState(true);
@@ -692,58 +698,72 @@ export default function App() {
     const drawH = Math.floor(image.height * scaleFactor);
 
     offCtx.save();
-    offCtx.translate(centerX, centerY);
+    offCtx.translate(centerX + imageOffsetX, centerY + imageOffsetY);
     offCtx.rotate((rotation * Math.PI) / 180);
     offCtx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
     offCtx.restore();
 
-    // Pembuatan Garis Potong (Cuts)
+    // Hitung Bounding Box Gambar Aktual di atas Kanvas
+    const effectiveImgW = isRotated ? drawH : drawW;
+    const effectiveImgH = isRotated ? drawW : drawH;
+    const imgX = Math.floor(centerX - effectiveImgW / 2 + imageOffsetX);
+    const imgY = Math.floor(centerY - effectiveImgH / 2 + imageOffsetY);
+    const imgW = effectiveImgW;
+    const imgH = effectiveImgH;
+
+    const isImageLocked = gridBoundsMode === 'image';
+    const bX = isImageLocked ? imgX : 0;
+    const bY = isImageLocked ? imgY : 0;
+    const bW = isImageLocked ? imgW : canvas.width;
+    const bH = isImageLocked ? imgH : canvas.height;
+
+    // Pembuatan Garis Potong (Cuts) Terikat pada Batas (bX, bY, bW, bH)
     const numCols = Math.floor(6 + (complexity / 100) * 55);
     const numRows = Math.floor(6 + (complexity / 100) * 55);
     
-    let xCuts = [0, canvas.width];
-    let yCuts = [0, canvas.height];
+    let xCuts = [bX, bX + bW];
+    let yCuts = [bY, bY + bH];
 
     if (boxSizeVariety === 'varied') {
         const majorCols = Math.floor(numCols * 0.35);
-        for(let i = 0; i < majorCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
+        for(let i = 0; i < majorCols; i++) xCuts.push(Math.floor(bX + rng() * bW));
         for(let i = 0; i < numCols - majorCols; i++) {
             const anchor = xCuts[Math.floor(rng() * xCuts.length)];
-            const offset = (rng() - 0.5) * (canvas.width * 0.3);
-            const val = Math.max(10, Math.min(canvas.width - 10, Math.floor(anchor + offset)));
+            const offset = (rng() - 0.5) * (bW * 0.3);
+            const val = Math.max(bX + 5, Math.min(bX + bW - 5, Math.floor(anchor + offset)));
             xCuts.push(val);
         }
         const majorRows = Math.floor(numRows * 0.35);
-        for(let i = 0; i < majorRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
+        for(let i = 0; i < majorRows; i++) yCuts.push(Math.floor(bY + rng() * bH));
         for(let i = 0; i < numRows - majorRows; i++) {
             const anchor = yCuts[Math.floor(rng() * yCuts.length)];
-            const offset = (rng() - 0.5) * (canvas.height * 0.3);
-            const val = Math.max(10, Math.min(canvas.height - 10, Math.floor(anchor + offset)));
+            const offset = (rng() - 0.5) * (bH * 0.3);
+            const val = Math.max(bY + 5, Math.min(bY + bH - 5, Math.floor(anchor + offset)));
             yCuts.push(val);
         }
     } else if (boxSizeVariety === 'editorial') {
         const divisionsX = [0.15, 0.35, 0.58, 0.78, 0.90];
         divisionsX.forEach(ratio => {
-            if (rng() > 0.25) xCuts.push(Math.floor(canvas.width * (ratio + (rng() - 0.5) * 0.08)));
+            if (rng() > 0.25) xCuts.push(Math.floor(bX + bW * (ratio + (rng() - 0.5) * 0.08)));
         });
         const divisionsY = [0.12, 0.30, 0.50, 0.72, 0.88];
         divisionsY.forEach(ratio => {
-            if (rng() > 0.25) yCuts.push(Math.floor(canvas.height * (ratio + (rng() - 0.5) * 0.08)));
+            if (rng() > 0.25) yCuts.push(Math.floor(bY + bH * (ratio + (rng() - 0.5) * 0.08)));
         });
-        for(let i = 0; i < Math.floor(numCols * 0.6); i++) xCuts.push(Math.floor(rng() * canvas.width));
-        for(let i = 0; i < Math.floor(numRows * 0.6); i++) yCuts.push(Math.floor(rng() * canvas.height));
+        for(let i = 0; i < Math.floor(numCols * 0.6); i++) xCuts.push(Math.floor(bX + rng() * bW));
+        for(let i = 0; i < Math.floor(numRows * 0.6); i++) yCuts.push(Math.floor(bY + rng() * bH));
     } else if (boxSizeVariety === 'bento') {
-        const stepX = canvas.width / 4;
-        const stepY = canvas.height / 4;
+        const stepX = bW / 4;
+        const stepY = bH / 4;
         for(let s = 1; s < 4; s++) {
-            xCuts.push(Math.floor(s * stepX + (rng() - 0.5) * (stepX * 0.35)));
-            yCuts.push(Math.floor(s * stepY + (rng() - 0.5) * (stepY * 0.35)));
+            xCuts.push(Math.floor(bX + s * stepX + (rng() - 0.5) * (stepX * 0.35)));
+            yCuts.push(Math.floor(bY + s * stepY + (rng() - 0.5) * (stepY * 0.35)));
         }
-        for(let i = 0; i < Math.floor(numCols * 0.45); i++) xCuts.push(Math.floor(rng() * canvas.width));
-        for(let i = 0; i < Math.floor(numRows * 0.45); i++) yCuts.push(Math.floor(rng() * canvas.height));
+        for(let i = 0; i < Math.floor(numCols * 0.45); i++) xCuts.push(Math.floor(bX + rng() * bW));
+        for(let i = 0; i < Math.floor(numRows * 0.45); i++) yCuts.push(Math.floor(bY + rng() * bH));
     } else {
-        for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(rng() * canvas.width));
-        for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(rng() * canvas.height));
+        for(let i = 0; i < numCols; i++) xCuts.push(Math.floor(bX + rng() * bW));
+        for(let i = 0; i < numRows; i++) yCuts.push(Math.floor(bY + rng() * bH));
     }
 
     xCuts = Array.from(new Set(xCuts)).sort((a,b) => a - b);
@@ -798,7 +818,7 @@ export default function App() {
             if (applyCard) {
                 cutoutCardPass.push({ x, y, w, h, dstW, dstH });
             } else if (applyStretch) {
-                let isHoriz = rng() > 0.5;
+                let isHoriz = rng() < (stretchBalance / 100);
                 if (!stretchDirX && stretchDirY) isHoriz = false;
                 if (stretchDirX && !stretchDirY) isHoriz = true;
                 const isBrutal = rng() < (brutalInt / 100);
@@ -831,6 +851,16 @@ export default function App() {
 
     if (renderStyle === 'zine') {
         ctx.filter = 'grayscale(80%) contrast(150%) brightness(90%)';
+    }
+
+    // Aktifkan Kliping Batas Gambar (mencegah slit-scan streak atau garis meluap ke luar gambar)
+    if (isImageLocked) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(bX, bY, bW, bH);
+        ctx.clip();
+        // Gambar dasar gambar agar tidak ada celah garis mikro
+        ctx.drawImage(offscreen, bX, bY, bW, bH, bX, bY, bW, bH);
     }
 
     // Pass 1: Gambar Normal
@@ -1025,12 +1055,12 @@ export default function App() {
         
         xCuts.forEach(x => {
            if(rng() > 0.8) { 
-               ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); 
+               ctx.beginPath(); ctx.moveTo(x, bY); ctx.lineTo(x, bY + bH); ctx.stroke(); 
            }
         });
         yCuts.forEach(y => {
            if(rng() > 0.8) { 
-               ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); 
+               ctx.beginPath(); ctx.moveTo(bX, y); ctx.lineTo(bX + bW, y); ctx.stroke(); 
            }
         });
         ctx.restore();
@@ -1069,11 +1099,16 @@ export default function App() {
         }
         ctx.restore();
     }
+
+    if (isImageLocked) {
+        ctx.restore();
+    }
   }, [
     image, rotation, seed, scale, complexity, density, stretchInt, brutalInt, stretchDirX, stretchDirY,
     showScratchBoxes, showBoxTypography, showCutoutCards, boxBorderWidth, boxBorderColor, boxSizeVariety,
     cutoutCardColor, cutoutCardOpacity, cutoutCardDensity, boxFontFamily, boxNumberFormat, boxFontSize,
-    showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat
+    showGridLines, showTextAnnotations, textColor, isManualMode, brushTarget, brushSize, aiWords, isDarkMode, renderStyle, canvasFormat,
+    gridBoundsMode, imageOffsetX, imageOffsetY, stretchBalance
   ]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas]);
@@ -1524,6 +1559,29 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Keseimbangan Stretch (H ↔ V) */}
+                  <div className="pt-2 border-t" style={{ borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+                    <div className={`flex justify-between text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      <span>Keseimbangan Stretch (H ↔ V)</span>
+                      <span className="text-cyan-400 font-mono text-[11px] font-bold">
+                        {stretchBalance}H / {100 - stretchBalance}V
+                      </span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={stretchBalance} 
+                      onChange={(e) => setStretchBalance(Number(e.target.value))} 
+                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
+                    />
+                    <div className="flex justify-between text-[9px] text-gray-500 mt-1 font-mono">
+                      <span>100% Vertikal</span>
+                      <span>50:50</span>
+                      <span>100% Horizontal</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Render Style */}
@@ -1692,6 +1750,49 @@ export default function App() {
             {/* ================= TAB 5: KANVAS & FORMAT ================= */}
             {activeTab === 'canvas' && (
               <div className="space-y-4 animate-in fade-in duration-150">
+                {/* Mode Batas Grid */}
+                <div className={`p-3.5 rounded-xl border space-y-3 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
+                  <div>
+                    <div className="text-xs font-bold flex items-center space-x-1.5">
+                      <span>🎯</span>
+                      <span>Mode Batas Grid (Grid Bounds)</span>
+                    </div>
+                    <div className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Pilih apakah grid terkunci pada batas gambar atau memenuhi seluruh kanvas</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setGridBoundsMode('image')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        gridBoundsMode === 'image'
+                          ? (isDarkMode ? 'bg-emerald-500/10 border-emerald-400 text-emerald-400 font-bold ring-1 ring-emerald-400/40 shadow-sm' : 'bg-emerald-50 border-emerald-600 text-emerald-900 font-bold shadow-sm')
+                          : (isDarkMode ? 'bg-[#1a1a1a] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')
+                      }`}
+                    >
+                      <div className="text-[11px] font-bold flex items-center space-x-1">
+                        <span>🖼️</span>
+                        <span>Terkunci Gambar</span>
+                      </div>
+                      <div className="text-[8.5px] opacity-75 mt-1 leading-snug">Grid & garis presisi terkunci pada batas gambar (Bawaan)</div>
+                    </button>
+
+                    <button
+                      onClick={() => setGridBoundsMode('canvas')}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        gridBoundsMode === 'canvas'
+                          ? (isDarkMode ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400 font-bold ring-1 ring-cyan-400/40 shadow-sm' : 'bg-cyan-50 border-cyan-600 text-cyan-900 font-bold shadow-sm')
+                          : (isDarkMode ? 'bg-[#1a1a1a] border-[#2c2c2c] text-gray-400' : 'bg-white border-gray-200 text-gray-700')
+                      }`}
+                    >
+                      <div className="text-[11px] font-bold flex items-center space-x-1">
+                        <span>📐</span>
+                        <span>Penuh Kanvas</span>
+                      </div>
+                      <div className="text-[8.5px] opacity-75 mt-1 leading-snug">Garis & slit-scan melebar melintasi seluruh area kanvas</div>
+                    </button>
+                  </div>
+                </div>
+
                 <div className={`p-3.5 rounded-xl border space-y-3.5 ${isDarkMode ? 'bg-[#141414] border-[#222]' : 'bg-gray-50 border-gray-200'}`}>
                   <div>
                     <div className={`text-xs font-semibold mb-1.5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Ukuran & Format Kanvas:</div>
@@ -1711,10 +1812,60 @@ export default function App() {
 
                   <div>
                     <div className={`flex justify-between text-xs font-semibold mb-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      <span>Image Bleed / Scale</span>
+                      <span>Skala Gambar (Image Scale)</span>
                       <span className="font-mono text-cyan-400">{scale}%</span>
                     </div>
                     <input type="range" min="10" max="100" value={scale} onChange={(e) => setScale(Number(e.target.value))} className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-400" />
+                    <div className={`text-[9px] mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {gridBoundsMode === 'image' ? '✨ Grid & garis bergerak serentak mengikuti skala gambar' : 'Mode penuh kanvas aktif'}
+                    </div>
+                  </div>
+
+                  {/* Offset Posisi Gambar */}
+                  <div className="pt-2 border-t space-y-2.5" style={{ borderColor: isDarkMode ? '#242424' : '#e5e7eb' }}>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Offset Posisi Gambar:
+                      </span>
+                      {(imageOffsetX !== 0 || imageOffsetY !== 0) && (
+                        <button
+                          onClick={() => { setImageOffsetX(0); setImageOffsetY(0); }}
+                          className="text-[10px] text-cyan-400 hover:underline cursor-pointer"
+                        >
+                          Reset Tengah (0, 0)
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <span>Posisi X</span>
+                          <span className="font-mono text-cyan-400">{imageOffsetX > 0 ? `+${imageOffsetX}` : imageOffsetX}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-400"
+                          max="400"
+                          value={imageOffsetX}
+                          onChange={(e) => setImageOffsetX(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <div className={`flex justify-between text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <span>Posisi Y</span>
+                          <span className="font-mono text-cyan-400">{imageOffsetY > 0 ? `+${imageOffsetY}` : imageOffsetY}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-400"
+                          max="400"
+                          value={imageOffsetY}
+                          onChange={(e) => setImageOffsetY(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex space-x-2 pt-1">
