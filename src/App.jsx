@@ -897,13 +897,42 @@ export default function App() {
 
         const promptText = `Analyze this image in detail and extract exactly 16 single-word or short hyphenated aesthetic keywords describing its subjects, anatomy, dominant colors, and vibe (tailored for Swiss-style graphic design specimen posters). Words MUST be in ${targetLang}. Return ONLY a comma-separated list in ALL CAPS, without numbering or explanations.`;
 
-        // Model resmi Google Gemini API
-        const candidateModels = [
+        // Model resmi aktif Google Gemini API 2026 & Penemuan Model Dinamis (Dynamic Model Discovery)
+        let candidateModels = [
           'gemini-2.5-flash',
+          'gemini-3.8-flash',
+          'gemini-3.7-flash',
+          'gemini-3.6-flash',
+          'gemini-3.5-flash',
           'gemini-2.5-flash-lite',
-          'gemini-2.0-flash',
-          'gemini-1.5-flash'
+          'gemini-2.5-pro'
         ];
+
+        // Coba periksa daftar model aktif yang didukung oleh API key pengguna
+        try {
+          const listResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+            { method: 'GET' }
+          );
+          if (listResp.ok) {
+            const listData = await listResp.json();
+            if (listData?.models && Array.isArray(listData.models)) {
+              const discovered = listData.models
+                .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+                .map(m => m.name.replace(/^models\//, ''))
+                .filter(name => !/1\.5|2\.0-flash/i.test(name)); // hindari model lama yang sudah pensiun
+              
+              if (discovered.length > 0) {
+                // Letakkan model flash yang ditemukan di urutan terdepan
+                const flashModels = discovered.filter(n => /flash/i.test(n));
+                const otherModels = discovered.filter(n => !/flash/i.test(n));
+                candidateModels = [...new Set([...flashModels, ...candidateModels, ...otherModels])];
+              }
+            }
+          }
+        } catch (discoErr) {
+          console.warn("Pencarian model dinamis dilewati, menggunakan daftar resmi 2026:", discoErr);
+        }
 
         let lastErr = null;
         for (const modelName of candidateModels) {
@@ -944,7 +973,7 @@ export default function App() {
 
                 if (parsed.length >= 8) {
                   words = parsed.slice(0, 16);
-                  sourceName = `Google Gemini (${modelName} Multimodal)`;
+                  sourceName = `Google Gemini (${modelName} Vision)`;
                   localStorage.setItem('geminiApiKey', apiKey);
                   break;
                 }
@@ -1041,17 +1070,61 @@ export default function App() {
     if (!coords) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
 
-    const brushRadiusCanvas = (brushSize / 100) * (canvas.width * 0.08);
+    // Akurat: radius kuas dalam satuan koordinat kanvas nyata
+    const scaleFactor = canvas.width / Math.max(1, rect.width);
+    const brushRadiusCanvas = (brushSize / 2) * scaleFactor;
+
     setGridCells(prev => {
       let hasChanges = false;
       const updated = prev.map(c => {
+        // Cek apakah kuas bersentuhan dengan sel
         const closestX = Math.max(c.x, Math.min(coords.x, c.x + c.w));
         const closestY = Math.max(c.y, Math.min(coords.y, c.y + c.h));
         const distSq = (coords.x - closestX)**2 + (coords.y - closestY)**2;
-        if (distSq <= brushRadiusCanvas**2 && c.mode !== manualBrushRole) {
-          hasChanges = true;
-          return { ...c, mode: manualBrushRole };
+
+        if (distSq <= brushRadiusCanvas**2) {
+          if (manualBrushRole === 'slit_v') {
+            // Hitung titik sampling relatif presisi di dalam sel sesuai titik kursor
+            const normY = Math.max(0.04, Math.min(0.96, (coords.y - c.y) / c.h));
+            // Batasi lebar pita agar proporsional dan tidak menutupi seluruh objek
+            const brushCoverage = Math.round(((brushRadiusCanvas * 2) / c.h) * 100);
+            const targetCov = manualSlitSize
+              ? Math.min(manualSlitSize, Math.max(10, brushCoverage))
+              : Math.max(10, Math.min(40, brushCoverage));
+
+            hasChanges = true;
+            return {
+              ...c,
+              mode: 'slit_v',
+              sampleOffset: normY,
+              slitCoverage: targetCov,
+              slitFrequency: slitFrequency || c.slitFrequency || 1,
+              slitOpacity: slitOpacity || c.slitOpacity || 100
+            };
+          } else if (manualBrushRole === 'slit_h') {
+            const normX = Math.max(0.04, Math.min(0.96, (coords.x - c.x) / c.w));
+            const brushCoverage = Math.round(((brushRadiusCanvas * 2) / c.w) * 100);
+            const targetCov = manualSlitSize
+              ? Math.min(manualSlitSize, Math.max(10, brushCoverage))
+              : Math.max(10, Math.min(40, brushCoverage));
+
+            hasChanges = true;
+            return {
+              ...c,
+              mode: 'slit_h',
+              sampleOffset: normX,
+              slitCoverage: targetCov,
+              slitFrequency: slitFrequency || c.slitFrequency || 1,
+              slitOpacity: slitOpacity || c.slitOpacity || 100
+            };
+          } else {
+            if (c.mode !== manualBrushRole) {
+              hasChanges = true;
+              return { ...c, mode: manualBrushRole };
+            }
+          }
         }
         return c;
       });
@@ -1064,7 +1137,11 @@ export default function App() {
     if (currentTool === 'pan') {
       setIsPanning(true);
       e.target.setPointerCapture(e.pointerId);
-    } else if (currentTool === 'brush' && engineMode === 'manual') {
+    } else if (currentTool === 'brush') {
+      if (engineMode !== 'manual') {
+        setEngineMode('manual');
+        setIsManualMode(true);
+      }
       isPaintingRef.current = true;
       e.target.setPointerCapture(e.pointerId);
       applyBrushAtPoint(e);
@@ -1103,7 +1180,7 @@ export default function App() {
     else if (isPanning) {
       setPan(prev => ({ x: prev.x + e.nativeEvent.movementX, y: prev.y + e.nativeEvent.movementY }));
     } 
-    else if (isPaintingRef.current && currentTool === 'brush' && engineMode === 'manual') {
+    else if (isPaintingRef.current && currentTool === 'brush') {
       applyBrushAtPoint(e);
     } else if (engineMode === 'manual') {
       const coords = getCanvasCoords(e.clientX, e.clientY);
@@ -1207,22 +1284,20 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (image && engineMode === 'auto') {
+    if (image) {
       generateAutomaticGrid();
     }
   }, [
     image, scale, rotation, canvasFormat, gridBoundsMode, complexity, gridPartitionStyle,
     boxSizeVariety, stretchBalance, stretchDirX, stretchDirY, cutoutCardDensity,
-    heroBreakoutThreshold, intactCellRatio, slitCoverage, slitFrequency, slitOpacity,
-    seed, imageOffsetX, imageOffsetY, engineMode, generateAutomaticGrid
+    heroBreakoutThreshold, intactCellRatio,
+    seed, imageOffsetX, imageOffsetY, generateAutomaticGrid
   ]);
 
   const handleRandomize = () => {
     const nextSeed = Math.random() * 10000;
     setSeed(nextSeed);
-    if (engineMode === 'auto') {
-      generateAutomaticGrid(nextSeed);
-    }
+    generateAutomaticGrid(nextSeed);
     showToast('Struktur Grid Diacak 🔀');
   };
 
@@ -1364,8 +1439,10 @@ export default function App() {
         ctx.restore();
       } else if (cell.mode === 'slit_v') {
         const sampleOffset = cell.sampleOffset != null ? cell.sampleOffset : 0.5;
-        const cov = Math.max(0.08, Math.min(1.0, ((cell.slitCoverage != null ? cell.slitCoverage : slitCoverage) / 100)));
-        const opac = Math.max(0.2, Math.min(1.0, ((cell.slitOpacity != null ? cell.slitOpacity : slitOpacity) / 100)));
+        const rawCov = cell.slitCoverage != null ? cell.slitCoverage : (engineMode === 'manual' ? manualSlitSize : slitCoverage);
+        const cov = Math.max(0.08, Math.min(1.0, rawCov / 100));
+        const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
+        const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
 
         ctx.save();
@@ -1408,8 +1485,10 @@ export default function App() {
         ctx.restore();
       } else if (cell.mode === 'slit_h') {
         const sampleOffset = cell.sampleOffset != null ? cell.sampleOffset : 0.5;
-        const cov = Math.max(0.08, Math.min(1.0, ((cell.slitCoverage != null ? cell.slitCoverage : slitCoverage) / 100)));
-        const opac = Math.max(0.2, Math.min(1.0, ((cell.slitOpacity != null ? cell.slitOpacity : slitOpacity) / 100)));
+        const rawCov = cell.slitCoverage != null ? cell.slitCoverage : (engineMode === 'manual' ? manualSlitSize : slitCoverage);
+        const cov = Math.max(0.08, Math.min(1.0, rawCov / 100));
+        const rawOpac = cell.slitOpacity != null ? cell.slitOpacity : slitOpacity;
+        const opac = Math.max(0.2, Math.min(1.0, rawOpac / 100));
         const freq = Math.max(1, Math.min(8, cell.slitFrequency || slitFrequency || 1));
 
         ctx.save();
@@ -1589,7 +1668,7 @@ export default function App() {
     gridBoundsMode, renderStyle, boxBorderWidth, boxBorderColor, boxBorderStyle, boxBorderOpacity,
     showScratchBoxes, showIntactBoxBorders, showBoxTypography,
     boxFontSize, boxFontFamily, showDirectionArrows, boxNumberFormat, cutoutCardColor, cutoutCardOpacity,
-    slitCoverage, slitFrequency, slitOpacity, stretchInt,
+    slitCoverage, manualSlitSize, slitFrequency, slitOpacity, stretchInt,
     gridCells, hoveredCellId, selectedCellId, engineMode
   ]);
 
@@ -1978,6 +2057,7 @@ export default function App() {
                               const val = Number(e.target.value);
                               setManualSlitSize(val);
                               setSlitCoverage(val);
+                              setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: val } : c));
                             }}
                             className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                           />
@@ -2002,8 +2082,11 @@ export default function App() {
                             ].map(item => (
                               <button
                                 key={item.f}
-                                onClick={() => setSlitFrequency(item.f)}
-                                className={`py-1 text-[9px] font-bold rounded border transition-all ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-600 border-gray-200')}`}
+                                onClick={() => {
+                                  setSlitFrequency(item.f);
+                                  setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: item.f } : c));
+                                }}
+                                className={`py-1 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-600 border-gray-200')}`}
                               >
                                 {item.label}
                               </button>
@@ -2019,7 +2102,11 @@ export default function App() {
                           </div>
                           <input
                             type="range" min="30" max="100" value={slitOpacity}
-                            onChange={(e) => setSlitOpacity(Number(e.target.value))}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setSlitOpacity(val);
+                              setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitOpacity: val } : c));
+                            }}
                             className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                           />
                         </div>
@@ -2093,7 +2180,7 @@ export default function App() {
                                     setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: cov } : c));
                                     showToast(`Ukuran ${cov}% diterapkan ke semua sel slit`);
                                   }}
-                                  className="w-full py-1 text-[8.5px] font-bold rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25"
+                                  className="w-full py-1 text-[8.5px] font-bold rounded bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/25 cursor-pointer"
                                 >
                                   Terapkan Ukuran ini ke Semua Sel Slit 🌊
                                 </button>
@@ -2116,6 +2203,15 @@ export default function App() {
                         );
                       })()}
 
+                      {/* Tombol Re-generate Struktur di Mode Manual */}
+                      <button
+                        onClick={handleRandomize}
+                        className="w-full py-2 px-3 rounded-lg bg-emerald-500/20 border border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-400 font-bold text-[10.5px] flex items-center justify-center space-x-2 transition-all active:scale-98 cursor-pointer"
+                      >
+                        <span>🔀</span>
+                        <span>Buat Variasi Struktur Baru (Re-generate Grid)</span>
+                      </button>
+
                       {/* Tombol Aksi Cepat Massal */}
                       <div className="grid grid-cols-2 gap-1 pt-1">
                         <button
@@ -2125,7 +2221,17 @@ export default function App() {
                           Semua Foto Utuh 🖼️
                         </button>
                         <button
-                          onClick={() => { setGridCells(prev => prev.map(c => ({ ...c, mode: c.w > c.h ? 'slit_h' : 'slit_v' }))); showToast('Semua sel diubah ke Slit-Scan'); }}
+                          onClick={() => {
+                            const cov = manualSlitSize || 30;
+                            setGridCells(prev => prev.map(c => ({
+                              ...c,
+                              mode: c.w > c.h ? 'slit_h' : 'slit_v',
+                              slitCoverage: cov,
+                              slitFrequency: slitFrequency || 1,
+                              slitOpacity: slitOpacity || 100
+                            })));
+                            showToast(`Semua sel diubah ke Slit-Scan (${cov}%)`);
+                          }}
                           className={`py-1.5 px-2 text-[9.5px] font-bold rounded border transition-all cursor-pointer ${isDarkMode ? 'bg-[#181818] border-[#2a2a2a] text-gray-300 hover:text-white' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'}`}
                         >
                           Semua Slit-Scan 🌊
@@ -2511,6 +2617,7 @@ export default function App() {
                         const val = Number(e.target.value);
                         setSlitCoverage(val);
                         setManualSlitSize(val);
+                        setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: val } : c));
                       }} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                     />
@@ -2535,8 +2642,11 @@ export default function App() {
                       ].map(item => (
                         <button
                           key={item.f}
-                          onClick={() => setSlitFrequency(item.f)}
-                          className={`py-1.5 text-[10px] font-bold rounded-lg border transition-all ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-700 border-gray-200')}`}
+                          onClick={() => {
+                            setSlitFrequency(item.f);
+                            setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: item.f } : c));
+                          }}
+                          className={`py-1.5 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-700 border-gray-200')}`}
                         >
                           {item.label}
                         </button>
@@ -2552,7 +2662,11 @@ export default function App() {
                     </div>
                     <input 
                       type="range" min="30" max="100" value={slitOpacity} 
-                      onChange={(e) => setSlitOpacity(Number(e.target.value))} 
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setSlitOpacity(val);
+                        setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitOpacity: val } : c));
+                      }} 
                       className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                     />
                   </div>
@@ -2727,6 +2841,7 @@ export default function App() {
                           const val = Number(e.target.value);
                           setManualSlitSize(val);
                           setSlitCoverage(val);
+                          setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitCoverage: val } : c));
                         }} 
                         className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                       />
@@ -2736,13 +2851,43 @@ export default function App() {
                         <span>100% (Penuh)</span>
                       </div>
 
+                      {/* Kerapatan Irisan / Multi-Stripe di Tab Kuas */}
+                      <div className="pt-1">
+                        <div className={`text-[10px] font-semibold mb-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          Garis Pita Multi-Stripe:
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { f: 1, label: '1 Pita' },
+                            { f: 2, label: '2 Garis' },
+                            { f: 4, label: '4 Halus' },
+                            { f: 8, label: 'Barcode' }
+                          ].map(item => (
+                            <button
+                              key={item.f}
+                              onClick={() => {
+                                setSlitFrequency(item.f);
+                                setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitFrequency: item.f } : c));
+                              }}
+                              className={`py-1 text-[9px] font-bold rounded border transition-all cursor-pointer ${slitFrequency === item.f ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm' : (isDarkMode ? 'bg-[#222] text-gray-400 border-[#333]' : 'bg-white text-gray-600 border-gray-200')}`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="flex justify-between text-[10px] font-semibold pt-1">
                         <span className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Opasitas Slit yang Dilukis:</span>
                         <span className="font-mono text-cyan-400">{slitOpacity}%</span>
                       </div>
                       <input 
                         type="range" min="30" max="100" value={slitOpacity} 
-                        onChange={(e) => setSlitOpacity(Number(e.target.value))} 
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setSlitOpacity(val);
+                          setGridCells(prev => prev.map(c => (c.mode === 'slit_v' || c.mode === 'slit_h') ? { ...c, slitOpacity: val } : c));
+                        }} 
                         className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-cyan-400" 
                       />
                     </div>
@@ -2797,7 +2942,7 @@ export default function App() {
                   {apiKeyInput.trim() ? (
                     <div className="text-[10.5px] p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center space-x-1.5">
                       <span>⚡</span>
-                      <span className="font-semibold">Mode: Google Gemini 2.5 Flash (Cloud Multimodal Vision)</span>
+                      <span className="font-semibold">Mode: Google Gemini 2.5 / 3.x Flash (Cloud Multimodal Vision)</span>
                     </div>
                   ) : (
                     <div className="text-[10.5px] p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center space-x-1.5">
@@ -2829,7 +2974,7 @@ export default function App() {
                     className={`w-full py-2.5 rounded-xl text-xs font-bold transition shadow-lg flex items-center justify-center space-x-2 cursor-pointer ${isAiAnalyzing || !image ? 'opacity-50 cursor-not-allowed bg-gray-600 text-gray-300' : 'bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black active:scale-95'}`}
                   >
                     <span>{isAiAnalyzing ? '⏳' : '✨'}</span>
-                    <span>{isAiAnalyzing ? 'Sedang Menganalisis Gambar...' : (apiKeyInput.trim() ? 'Pindai AI (Gemini 2.5 Flash Vision)' : 'Pindai Cerdas Gambar (Bebas Token)')}</span>
+                    <span>{isAiAnalyzing ? 'Sedang Menganalisis Gambar...' : (apiKeyInput.trim() ? 'Pindai AI (Gemini 2.5 / 3.x Flash Vision)' : 'Pindai Cerdas Gambar (Bebas Token)')}</span>
                   </button>
 
                   {/* Tombol Alternatif jika API Key terisi */}
@@ -3167,6 +3312,26 @@ export default function App() {
                   <div className={`bg-[#00FFFF] shadow-[0_0_3px_#00FFFF] ${g.type === 'h' ? 'w-full h-[1px]' : 'h-full w-[1px]'}`}></div>
                </div>
             ))}
+
+            {/* Indikator Lingkaran Kuas Interaktif (Interactive Brush Cursor Preview) */}
+            {activeTool === 'brush' && !isPanning && image && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: mousePos.x,
+                  top: mousePos.y,
+                  width: `${brushSize * viewScale}px`,
+                  height: `${brushSize * viewScale}px`,
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
+                  zIndex: 50,
+                  borderRadius: '50%',
+                  border: '2px dashed rgba(6, 182, 212, 0.85)',
+                  backgroundColor: 'rgba(6, 182, 212, 0.12)',
+                  boxShadow: '0 0 12px rgba(6, 182, 212, 0.4)'
+                }}
+              />
+            )}
           </div>
 
           {/* --- FLOATING CANVAS DOCK (CANVA / FIGMA STYLE BOTTOM CENTER) --- */}
