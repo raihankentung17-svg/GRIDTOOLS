@@ -347,8 +347,20 @@ const getInitialApiKey = () => {
   const handleUpload = (e) => processFile(e.target.files[0]);
   const handleRotate = () => { 
     setRotation((prev) => (prev + 90) % 360); 
-    stretchMaskPointsRef.current = []; 
-    cardMaskPointsRef.current = []; 
+    if (stretchMaskPointsRef.current && stretchMaskPointsRef.current.length > 0) {
+      stretchMaskPointsRef.current = stretchMaskPointsRef.current.map(pt => ({
+        ...pt,
+        nx: 1 - pt.ny,
+        ny: pt.nx
+      }));
+    }
+    if (cardMaskPointsRef.current && cardMaskPointsRef.current.length > 0) {
+      cardMaskPointsRef.current = cardMaskPointsRef.current.map(pt => ({
+        ...pt,
+        nx: 1 - pt.ny,
+        ny: pt.nx
+      }));
+    }
     showToast('Kanvas Diputar 90°');
   };
   const handleRandomize = () => {
